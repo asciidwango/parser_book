@@ -1,0 +1,15 @@
+{
+  "structure": {
+    "readme" : "README.md",
+    "summary": "SUMMARY.md"
+  },
+  "plugins": [
+    "-search",
+    "include-codeblock",
+    "japanese-support",
+    "footnote-string-to-number",
+    "anchors",
+    "theme-official"
+  ],
+  "title": "Parser Book"
+}
