@@ -3,7 +3,7 @@
   "private": true,
   "license": "MIT",
   "version": "0.0.1",
-  "description": "Parser Book",
+  "description": "構文解析の世界",
   "main": "index.js",
   "directories": {
     "test": "test"
@@ -28,5 +28,10 @@
     "gitbook-plugin-theme-official": "2.0.0",
     "kramed": "0.5.6",
     "npm-run-all": "2.1.0"
+  },
+  "dependencies": {
+    "gitbook-plugin-anchors": "^0.7.1",
+    "gitbook-plugin-include-codeblock": "^3.1.2",
+    "gitbook-plugin-theme-official": "^2.1.1"
   }
 }
