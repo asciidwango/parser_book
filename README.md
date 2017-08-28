@@ -1,7 +1,40 @@
 # 構文解析の本
 
 アスキードワンゴで出版予定（2018年中に出せたらいいな）
-の構文解析本に関するリポジトリ
+の構文解析本に関するリポジトリ。とりあえずGitBookの形式で書き始める
+
+## リポジトリの構成
+
+```
+./
+  book.json // GitBookの設定ファイル
+  package.json // npmの各種設定
+  package-lock.json // package.jsonのロックファイル（Gemfile.lockみたいなもの）
+  README.MD // このファイル
+  SUMMARY.md // 章構成
+  .gitignore // gitの管理対象から除外するパターンの列挙
+```
+
+## 書籍のビルド方法
+
+1. npm install
+
+* 依存ライブラリをインストールする
+
+```
+$ npm install
+```
+
+2. npm start
+
+* GitBookによって、書籍をビルドし、プレビューができる状態にする
+
+```
+$ npm start // GitBookによるプレビュー
+...
+Starting server ...
+Serving book on http://localhost:4000
+```
 
 ## 趣旨
 
