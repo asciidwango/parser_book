@@ -1,2 +1,8 @@
 node_modules/
 _book/
+*.class
+target/
+classes/
+.idea/
+.gradle/
+build/
