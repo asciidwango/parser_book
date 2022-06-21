@@ -1,15 +1,11 @@
 {
+  "root": "./honkit",
   "structure": {
     "readme" : "README.md",
     "summary": "SUMMARY.md"
   },
   "plugins": [
-    "-search",
-    "include-codeblock",
-    "japanese-support",
-    "footnote-string-to-number",
-    "anchors",
-    "theme-official"
+    "honkit-plugin-search-plus"
   ],
-  "title": "構文解析の世界"
+  "title": "構文解析の世界を探求しよう"
 }
