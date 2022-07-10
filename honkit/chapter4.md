@@ -338,42 +338,245 @@ TBD（コメント：書いていて、ここはちょっと難しいなと実�
 
 　2000年代に入るまで、構文解析手法の主流はLR法の変種であり、つまるところボトムアップ構文解析アルゴリズムでした。その理由の一つに、先読みを前提とする限り、従来のLL法はLR法より表現力が弱いという弱点がありました。トップダウン型でもバックトラックを用いればより幅広い言語を表現できることは比較的昔から知られていましたが、バックトラックによって解析時間が最悪で指数関数時間になるため、コンパイラの教科書として採用されることが多い、いわゆるドラゴンブックでも現実的ではないといった記述がありました（記憶に頼ったもので、出典が曖昧。現在のドラゴンブックにも該当記述があるかは要確認）。しかし、2004年に提案されたParsing Expression Grammar（PEG）はそのような状況を変えました（Ford:2004）。
 
-　PEGはとてもおおざっぱに言ってしまえば、無制限な先読みとバックトラックを許すトップダウン型の構文解析手法の一つです。DCFL＋一部の文脈依存言語を取り扱うことができますし、その上、Packrat Parsingという手法によって線形時間で構文解析を行うことが保証されているというとても良い性質を持っています。さらに、実質的にLL法やLR法で必須であった字句解析器と構文解析器の分離が要らず、アルゴリズムも非常にシンプルであるため、ここ十年くらいで解析表現手法をベースとした構文解析生成系が数多く登場しました。
+　PEGはおおざっぱに言ってしまえば、無制限な先読みとバックトラックを許すトップダウン型の構文解析手法の一つです。DCFL＋一部の文脈依存言語を取り扱うことができますし、その上、Packrat Parsingという手法によって線形時間で構文解析を行うことが保証されているというとても良い性質を持っています。さらに、実質的にLL法やLR法で必須であった字句解析器と構文解析器の分離が要らず、アルゴリズムも非常にシンプルであるため、ここ十年くらいで解析表現手法をベースとした構文解析生成系が数多く登場しました。
 
-　などと他人事のように書いていますが、ほかならぬ筆者が大学院時代に専門分野として研究していたのがまさしくこのPEGでした。（カットの話とか蘊蓄書く？やらない方がいいかもしれない）
+　他人事のように書いていますが、ほかならぬ筆者が大学院時代に専門分野として研究していたのがまさしくこのPEGでした。さらに、Python 3.9ではPEGベースの構文解析器が採用されるなど、着々と採用されるケースが増えています。
 
-　さらに、Python 3.9ではPEGベースの構文解析器が採用されるなど、着々と採用されるケースが増えています（この辺り、PEGの人として主観入り過ぎているかも）。
+　2章で既にPEGを用いた構文解析器を自作したのを覚えているでしょうか。たとえば、配列の文法を表現した以下のPEGがあるとします。
+
+```bnf
+array = LBRACKET RBRACKET | LBRACKET {value {COMMA value}} RBRACKET ;
+```
+
+　このPEGに対応するJavaの構文解析器（メソッド）は以下のようになるのでした。
+
+```java
+    public Ast.JsonArray parseArray() {
+        int backup = cursor;
+        try {
+            // LBRACKET RBRACKET
+            parseLBracket();
+            parseRBracket();
+            return new Ast.JsonArray(new ArrayList<>());
+        } catch (ParseException e) {
+            cursor = backup;
+        }
+
+        // LBRACKET
+        parseLBracket();
+        List<Ast.JsonValue> values = new ArrayList<>();
+        // value
+        var value = parseValue();
+        values.add(value);
+        try {
+            // {value {COMMA value}}
+            while (true) {
+                parseComma();
+                value = parseValue();
+                values.add(value);
+            }
+        } catch (ParseException e) {
+            // RBRACKET
+            parseRBracket();
+            return new Ast.JsonArray(values);
+        }
+    }
+```
+
+　PEGの特色は、
+
+```java
+        int backup = cursor;
+```
+
+　という行によって、解析を始める時点でのソースコード上の位置を保存しておき、もし解析に失敗したら以下のように「巻き戻す」ところにあります。そして、「巻き戻した」位置から次の分岐を試そうとするのです。
+
+```java
+        } catch (ParseException e) {
+            cursor = backup;
+        }
+        // LBRACKET
+        parseLBracket();
+        // ...
+```
+
+　なお、PEGの挙動を簡単に説明するために2章および本章では例外をスロー/キャッチするという実装にしていますが、現実にはこのような実装にするとオーバーヘッドが大きすぎるため、実用的なPEGパーザでは例外を使わないことが多いです。
+
+　より一般化すると、PEGの挙動は以下の8つの要素を使って説明することができます。
+
+1. 空文字列： ε
+2. 終端記号： t
+3. 非終端記号： N
+4. 連接： e1 e2
+5. 選択： e1 / e2
+6. 0回以上の繰り返し： e*
+7. 肯定述語： &e
+8. 否定述語： !e
+  
+  次節以降では、この8つの要素がそれぞれどのような意味を持つかを説明していきます。
+
+### 空文字列
+
+TBD
+
+### 終端記号
+
+TBD
+
+### 非終端記号
+
+　あるPEGの規則Gがあったとき、
+
+```peg
+G <- H e1
+H <- e2
+```
+
+1. Hに対応する規則を探索する（H <- eが該当）
+2. Hの呼び出しから戻って来たときのために、スタックに現在位置を退避
+3. e2とsの照合を行う
+4. 3.が失敗した場合、H e1全体が失敗する
+5. 3.が成功した場合、e1とsのサフィックスを照合した結果を返す
+
+### 連接
+
+　あるPEGの規則Gがあったとき、
+
+```peg
+G <- e1 / e2
+```
+
+　Gと文字列sの照合を行うために、以下のような動作を行います。
+
+1. e1とsの照合を行う
+2. 1.が成功していれば、sのサフィックスを返し、成功する
+3. 1.が失敗した場合、e2と2の照合を行い、結果を返す
+
+### 選択
+
+　あるPEGの規則Gがあったとき、
+
+```peg
+G <- e1 e2
+```
+
+　Gと文字列sの照合を行うために、以下のような動作を行います。
+
+1. e1とsの照合を行う
+2. 1.が成功していれば、e2とsのサフィックスの照合を行い結果を返す
+3. 1.が失敗した場合、その結果を返す
+
+### 0回以上の繰り返し
+
+　あるPEGの規則Gがあったとき、
+
+```peg
+G <- e*
+```
+
+　Gと文字列eの照合を行うために、以下のような動作を行います。
+
+1. eとsの照合を行う
+2. 1.が成功していれば、sをsのサフィックスに置き換えて、1に戻る
+3. 1.が失敗した場合、sを返し、成功する
+
+　`e*`は「0回以上の繰り返し」を表現するため、一回も成功しない場合でも、全体が成功するのがポイントです。
+
+### 肯定述語
+
+TBD
+
+### 否定述語
+
+TBD
+
+### PEGの操作的意味論
+
+ここまでで、PEGを構成する8つの要素について説明してきましたが、実際のところやや厳密さに欠けるものでした。この挙動をより厳密に説明すると以下のようになります。
+
+（以下、Fordの論文をはりつけたもの。これをベースに日本語の説明に書き換える）
+
+```
+1. Empty: 
+  (ε,x) ⇒ (1,ε) for any x ∈ V ∗ T.
+2. Terminal (success case): 
+  (a,ax) ⇒ (1,a) if a ∈VT , x ∈V ∗ T.
+3. Terminal (failure case):
+   (a,bx) ⇒ (1, f) if a 6= b, and (a,ε) ⇒ (1, f).
+4. Nonterminal:
+  (A,x) ⇒ (n + 1,o) if A ← e ∈ R and (e,x) ⇒ (n,o).
+5. Sequence (success case): 
+  If (e1,x1x2y) ⇒ (n1,x1) and (e2,x2y) ⇒ (n2,x2), then (e1e2,x1x2y) ⇒ (n1 +n2 +1,x1x2).  Expressions e1 and e2 are matched in sequence, and if each succeeds and consumes input portions x1 and x2 respectively, then the sequence succeeds and consumes the string x1x2.
+6. Sequence (failure case 1): 
+  If (e1,x) ⇒ (n1, f), then (e1e2,x) ⇒ (n1 + 1, f). If e1 is tested and fails, then the sequence e1e2 fails without attempting e2, 
+7. Sequence (failure case 2): 
+  If (e1,x1y) ⇒ (n1,x1) and (e2,y) ⇒ (n2, f), then (e1e2,x1y) ⇒ (n1 + n2 + 1, f). If e1 succeeds but e2 fails, then the sequence expression fails.
+8. Alternation (case 1): 
+  If (e1,xy) ⇒ (n1,x), then (e1/e2,xy) ⇒ (n1 +1,x). Alternative e1 is first tested, and if it succeeds, the expression e1/e2 succeeds without testing e2.
+9. Alternation (case 2): 
+  If (e1,x) ⇒ (n1, f) and (e2,x) ⇒ (n2,o), then (e1/e2,x) ⇒ (n1 + n2 + 1,o). If e1 fails, then e2 is tested and its result is used instead.
+10. Zero-or-more repetitions (repetition case): 
+  If (e,x1x2y) ⇒ (n1,x1) and (e∗,x2y) ⇒ (n2,x2), then (e∗,x1x2y) ⇒ (n1 + n2 +1,x1x2).
+11. Zero-or-more repetitions (termination case): 
+  If (e,x) ⇒ (n1, f), then (e∗,x) ⇒ (n1 +1,ε).
+12. Not-predicate (case 1): 
+  If (e,xy) ⇒ (n,x), then (!e,xy) ⇒ (n + 1, f). If expression e succeeds consuming input x, then the syntactic predicate !e fails.
+13. Not-predicate (case 2): 
+  If (e,x) ⇒ (n, f), then (!e,x) ⇒ (n + 1,ε). If e fails, then !e succeeds but consumes nothing.
+```
 
 ## 4.9 - Packrat Parsing
 
-　「素の」PEGによってとても幅広い範囲の言語を取り扱うことができることは、前節で書いた通りですが、一つ大きな弱点があります。それは、解析時間が最悪指数関数時間になってしまうことです。現実的にはそのようなケースは稀であるという指摘が複数の論文でありますが、ともあれ原理的にはそのような弱点があります。Packrat Parsingはメモ化という技法を用いることでPEGで表現される言語を線形時間で解析可能にします。
+　「素の」PEGは非常に単純かつ、とても幅広い範囲の言語を取り扱うことができます。しかし、PEGには一つ大きな弱点があります。解析時間が最悪の場合に指数関数時間になってしまうことです。現実的にはそのようなケースは稀であるという指摘も複数の論文でなされていますが、原理的にはそのような弱点があります。Packrat Parsingはメモ化という技法を用いることでPEGで表現される言語を線形時間で解析可能にします。
+
+　しかし、メモ化という技法自体を知らない読者の方も多いでしょうから、ここではまずメモ化について説明します。
+
+### 4.9.1 fib関数
+
+TBD
+
+### 4.9.2 fib関数のメモ化
+
+TBD
+
+### 4.9.3 parse関数
 　
 TBD
 
-## 4.10 - Generalized LR(GLR) Parsing
-
-Generalized LR(GLR) parsingはTomitaらによって1991年に提案された手法です（Tomita:1991）。
+### 4.9.4 parse関数のメモ化 - Packrat Parsing
 
 TBD
 
-## 4.11 - Generalized LL(GLL) Parsing
+## 4.10 - Generalized LR (GLR) Parsing
 
-Generalized LL(GLL) parsingはScottらによって2010年に提案された手法です（Scott:2010）。
+Generalized LR(GLR) parsingはTomitaらによって1991年に提案された手法です（Tomita:1991）。Generalized LRという名前の通り、非決定的で曖昧なCFGを取り扱えるようにLR parsingを拡張したアルゴリズムです。
 
 TBD
 
-## 4.12 - Parsing with Derivatives
+## 4.11 - Generalized LL (GLL) Parsing
 
-Parsing with derivativesはMightらによって2011年に提案された手法です（Might:2011）。
+Generalized LL(GLL) parsingはScottらによって2010年に提案された手法です（Scott:2010）。Generalizd LLという名前の通りLL parsingを拡張したものですが、先行するGLR parsingの影響を受けたアルゴリズムです。
+
+TBD
+
+## 4.12 - Parsing with Derivatives (PwD)
+
+Parsing with derivatives(PwD)はMightらによって2011年に提案された手法です（Might:2011）。
 
 ## 4.13 - 構文解析アルゴリズムの計算量と表現力の限界 
 
-　ここまでLL parsing、LR parsing、Packrat parsingについて書いてきましたが、ここでその計算量的な性質についてまとめておきましょう。
+　LL parsing、LR parsing、PEG、Packrat parsing、GLR parsing、GLL parsingについてこれまで書いてきましたが、計算量的な性質についてまとめておきましょう。
 
-TBD
+- LL(k)
+- LR(k)
+- PEG
+- Packrat pasing
+- GLR parsing
+- GLL parsing
+- PwD
 
 ## 4.14 - まとめ
 
-　この章では構文解析アルゴリズムの中で比較的メジャーな手法について、そのアイデアと概要を含めて説明しました。
+　この章では構文解析アルゴリズムの中で比較的メジャーな手法について、そのアイデアと概要を含めて説明しました。その他にも多数の手法がありますが、いずれにせよ、「上から下に」向かって解析するトップダウンの手法と「下から上に」向かって解析するボトムアップの手法のどちらかに分類できると言えます。
 
-TBD
+　GLRやGLL、PwDについては普段触れる機会はそうそうありませんが、LLやLR、PEGのパーザジェネレータは多数存在するため、基本的な動作原理についておさえておいて損はありません。また、余裕があれば各構文解析手法を使って実際のパーザジェネレータを実装してみるのも良いでしょう。実際にパーザジェネレータを実装することで、より深く構文解析手法を理解することもできます。
