@@ -602,6 +602,7 @@ public class Main {
 
 ```
 A <- "(" A ")"
+   / "(" A A ")"
    / "0"
 ```
 
@@ -627,6 +628,7 @@ public class Parser {
         return string.length() == 0;
     }
     public static ParseResult parse(String input) {
+        String start = input;
         try {
             // "(" A ")"
             if(isEnd(input) || input.charAt(0) != '(') {
@@ -640,17 +642,53 @@ public class Parser {
 
             var success = (ParseResult.Success)result;
 
-            if(isEnd(success.rest()) || success.rest().charAt(0) != ')') {
-                throw new ParseError(success.rest());
+            input = success.rest();
+            if(isEnd(input) || input.charAt(0) != ')') {
+                throw new ParseError(input);
             }
 
-            return new ParseResult.Success(")", success.rest().substring(1));
+            return new ParseResult.Success(success.value(), input.substring(1));
         } catch (ParseError error) {
-            if((!isEnd(error.rest())) && error.rest().charAt(0) == '0') {
-                return new ParseResult.Success("0", error.rest().substring(1));
-            }
-            return new ParseResult.Failure(error.rest());
+            input = start;
         }
+
+        try {
+            // "(" A A ")"
+            if((isEnd(input)) || input.charAt(0) != '(') {
+                throw new ParseError(input);
+            }
+
+            var result = parse(input.substring(1));
+            if(!(result instanceof ParseResult.Success)) {
+                throw new ParseError(result.rest());
+            }
+
+            var success = (ParseResult.Success)result;
+            input = success.rest();
+
+            result = parse(input);
+
+            if(!(result instanceof ParseResult.Success)) {
+                throw new ParseError(result.rest());
+            }
+
+            success = (ParseResult.Success)result;
+            input = success.rest();
+
+            if(isEnd(input) || input.charAt(0) != ')') {
+                throw new ParseError(input);
+            }
+
+            return new ParseResult.Success(success.value(), success.rest().substring(1));
+        } catch (ParseError error) {
+            input = start;
+        }
+
+        if(isEnd(input) || input.charAt(0) != '0') {
+            return new ParseResult.Failure(input);
+        }
+
+        return new ParseResult.Success(input.substring(0, 1), input.substring(1));
     }
 }
 ```
@@ -666,15 +704,115 @@ jshell> Parser.parse("(0)");
 $27 ==> Success[value=), rest=]
 ```
 　
-しかし、この構文解析器には弱点があります。
-
-<!--
-考えてみるとこの文法だと指数関数時間にならない……
--->
+しかし、この構文解析器には弱点があります。`(((((((((((((((((((((((((((0)))`のようなカッコのネスト数が深いケースで急激に解析にかかる時間が増大してしまうのです。これはまさにPEGだからこそ起こる問題点だと言えます。
 
 ### 4.9.4 parseメソッドのメモ化 - Packrat Parsing
 
-TBD
+
+```java
+import java.util.*;
+sealed interface ParseResult permits ParseResult.Success, ParseResult.Failure {
+    public abstract String rest();
+    record Success(String value, String rest) implements ParseResult {}
+    record Failure(String rest) implements ParseResult {}
+}
+class ParseError extends RuntimeException {
+    public final String rest;
+    public String rest() {
+        return rest;
+    }
+    ParseError(String rest) {
+        this.rest = rest;
+    }
+}
+class PackratParser {
+    private Map<String, ParseResult> cache = new HashMap<>();
+    private boolean isEnd(String string) {
+        return string.length() == 0;
+    }
+    public ParseResult parse(String input) {
+        String start = input;
+        try {
+            // "(" A ")"
+            if(isEnd(input) || input.charAt(0) != '(') {
+                throw new ParseError(input);
+            }
+
+            input = input.substring(1);
+            ParseResult result;
+            result = cache.get(input);
+            if(result == null) {
+                result = parse(input);
+                cache.put(input, result);
+            }
+
+            if(!(result instanceof ParseResult.Success)) {
+                throw new ParseError(result.rest());
+            }
+
+            var success = (ParseResult.Success)result;
+
+            input = success.rest();
+            if(isEnd(input) || input.charAt(0) != ')') {
+                throw new ParseError(input);
+            }
+
+            return new ParseResult.Success(success.value(), input.substring(1));
+        } catch (ParseError error) {
+            input = start;
+        }
+
+        try {
+            // "(" A A ")"
+            if((isEnd(input)) || input.charAt(0) != '(') {
+                throw new ParseError(input);
+            }
+
+            input = input.substring(1);
+            ParseResult result;
+            result = cache.get(input);
+            if(result == null){
+                result = parse(input);
+                cache.put(input, result);
+            } 
+
+            if(!(result instanceof ParseResult.Success)) {
+                throw new ParseError(result.rest());
+            }
+
+            var success = (ParseResult.Success)result;
+            input = success.rest();
+
+            result = cache.get(input);
+            if(result == null) {
+                result = parse(input);
+                cache.put(input,result);
+            }
+
+            if(!(result instanceof ParseResult.Success)) {
+                throw new ParseError(result.rest());
+            }
+
+            success = (ParseResult.Success)result;
+            input = success.rest();
+
+            if(isEnd(input) || input.charAt(0) != ')') {
+                throw new ParseError(input);
+            }
+
+            return new ParseResult.Success(success.value(), input.substring(1));
+        } catch (ParseError error) {
+            input = start;
+        }
+
+        if(isEnd(input) || input.charAt(0) != '0') {
+            return new ParseResult.Failure(input);
+        }
+
+        return new ParseResult.Success(input.substring(0, 1), input.substring(1));
+    }
+}
+```
 
 ## 4.10 - Generalized LR (GLR) Parsing
 
