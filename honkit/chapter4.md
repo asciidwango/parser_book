@@ -597,10 +597,82 @@ public class Main {
 　次の項ではPEGをナイーヴに実装した`parse`関数をまずお見せして、続いてそれをメモ化したバージョン（Packrat parsing）をお見せすることにします。`fib`メソッドのメモ化と同じようにPEGによる構文解析もメモ化できることがわかるでしょう。
 
 ### 4.9.3 parseメソッド
-　
-TBD
 
-### 4.9.4 parse関数のメモ化 - Packrat Parsing
+　ここからは簡単なPEGで記述された文法を元に構文解析器を組み立てていくわけですが、下記のような任意個の`()`で囲まれた`0`の構文解析器を作ります。
+
+```
+A <- "(" A ")"
+   / "0"
+```
+
+　一見単純過ぎる例にも思えますが、メモ化の効果を体感するにはこれで十分とも言えるのです。さて、早速構文解析器を書いていきましょう。
+
+```java
+sealed interface ParseResult permits ParseResult.Success, ParseResult.Failure {
+    public abstract String rest();
+    record Success(String value, String rest) implements ParseResult {}
+    record Failure(String rest) implements ParseResult {}
+}
+class ParseError extends RuntimeException {
+    public final String rest;
+    public String rest() {
+        return rest;
+    }
+    ParseError(String rest) {
+        this.rest = rest;
+    }
+}
+public class Parser {
+    private static boolean isEnd(String string) {
+        return string.length() == 0;
+    }
+    public static ParseResult parse(String input) {
+        try {
+            // "(" A ")"
+            if(isEnd(input) || input.charAt(0) != '(') {
+                throw new ParseError(input);
+            }
+
+            var result = parse(input.substring(1));
+            if(!(result instanceof ParseResult.Success)) {
+                throw new ParseError(result.rest());
+            }
+
+            var success = (ParseResult.Success)result;
+
+            if(isEnd(success.rest()) || success.rest().charAt(0) != ')') {
+                throw new ParseError(success.rest());
+            }
+
+            return new ParseResult.Success(")", success.rest().substring(1));
+        } catch (ParseError error) {
+            if((!isEnd(error.rest())) && error.rest().charAt(0) == '0') {
+                return new ParseResult.Success("0", error.rest().substring(1));
+            }
+            return new ParseResult.Failure(error.rest());
+        }
+    }
+}
+```
+
+このプログラムを使うと以下のように構文解析を行うことが出来ます。
+
+```java
+jshell> Parser.parse("(");
+$25 ==> Failure[rest=]
+jshell> Parser.parse("()");
+$26 ==> $26 ==> Failure[rest=)]
+jshell> Parser.parse("(0)");
+$27 ==> Success[value=), rest=]
+```
+　
+しかし、この構文解析器には弱点があります。
+
+<!--
+考えてみるとこの文法だと指数関数時間にならない……
+-->
+
+### 4.9.4 parseメソッドのメモ化 - Packrat Parsing
 
 TBD
 
