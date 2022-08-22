@@ -413,116 +413,204 @@ array = LBRACKET RBRACKET | LBRACKET {value {COMMA value}} RBRACKET ;
 7. 肯定述語： &e
 8. 否定述語： !e
   
-  次節以降では、この8つの要素がそれぞれどのような意味を持つかを説明していきます。
+  次節以降では、この8つの要素がそれぞれどのような意味を持つかを説明していきます。なお、次節以降で
+
+```java
+match(e, "x") == Success("x", "")
+```
+
+や
+
+```java
+match(e, "x") == Failure()
+```
+
+というJava言語ライクな記法を使いますが、前者は式`e`が文字列`"x"`にマッチして、残りの文字列が空であることを、後者はマッチしないことを表現します。
 
 ### 空文字列
 
-TBD
+空文字列εは0文字**以上**の文字列にマッチします。たとえば、
+
+```java
+match(ε, "") == Success("", "")
+```
+
+が成り立つだけでなく、
+
+```java
+match(ε, "x") ==  Success("", "x")
+```
+
+や
+
+```java
+match(ε, "xyz") == Success("", "xyz")
+```
+
+も成り立ちます。εは**あらゆる文字列**にマッチするとも言えるかもしれません。
 
 ### 終端記号
 
-TBD
+終端記号`t`は1文字以上の長さで特定のアルファベットで**始まる**文字列にマッチします。たとえば、
 
-### 非終端記号
-
-　あるPEGの規則Gがあったとき、
-
-```peg
-G <- H e1
-H <- e2
+```java
+match(x, "x") == Success("x", "")
 ```
 
-1. Hに対応する規則を探索する（H <- eが該当）
-2. Hの呼び出しから戻って来たときのために、スタックに現在位置を退避
-3. e2とsの照合を行う
-4. 3.が失敗した場合、H e1全体が失敗する
-5. 3.が成功した場合、e1とsのサフィックスを照合した結果を返す
+や
 
-### 連接
-
-　あるPEGの規則Gがあったとき、
-
-```peg
-G <- e1 / e2
+```java
+match(x, "xy") == Success("x", "y")
 ```
 
-　Gと文字列sの照合を行うために、以下のような動作を行います。
+が成り立ちます。一方、
 
-1. e1とsの照合を行う
-2. 1.が成功していれば、sのサフィックスを返し、成功する
-3. 1.が失敗した場合、e2と2の照合を行い、結果を返す
+```java
+match(x, "y") == Failure
+```
+
+ですし、
+
+```java
+match(x, "") == Failure
+```
+
+です。εの場合と同じく「残りの文字列」があってもマッチする点に注意してください。
+
+
 
 ### 選択
 
-　あるPEGの規則Gがあったとき、
+`e1`と`e2`は共に式であるものとします。このとき、
+
 
 ```peg
-G <- e1 e2
+e1 / e2
 ```
 
-　Gと文字列sの照合を行うために、以下のような動作を行います。
+　に対する`match(e1 / e2, s)`は以下のような動作を行います。
 
-1. e1とsの照合を行う
-2. 1.が成功していれば、e2とsのサフィックスの照合を行い結果を返す
+1. `match(e1, s)`を実行する
+2. 1.が成功していれば、sのサフィックスを返し、成功する
+3. 1.が失敗した場合、`match(e2, s)`を実行し、結果を返す
+
+### 選択
+
+`e1`と`e2`は共に式であるものとします。このとき、
+
+```peg
+e1 e2
+```
+
+　に対する`match(e1 e2, s)`は以下のような動作を行います。
+
+1. `match(e1, s)`を実行する
+2. 1.が成功したとき、結果を`Success(s1,s2)`とする。この時、`match(e2,s2)`を実行し、結果を返す
 3. 1.が失敗した場合、その結果を返す
+
+### 非終端記号
+
+　あるPEGの規則Nがあったとき、
+
+```peg
+N <- e
+```
+
+　これに対する`match(N, s)`は以下のような動作を行います。
+
+1. `N`に対応する規則を探索する（`N <- e`が該当）
+2. `N`の呼び出しから戻って来たときのために、スタックに現在位置`p`を退避
+3. `match(e, s)`を実行する。結果を`M`とする。
+4. スタックに退避した`p`を戻す
+5. `M`を全体の結果とする
 
 ### 0回以上の繰り返し
 
-　あるPEGの規則Gがあったとき、
+`e`は式であるものとします。このとき、
 
 ```peg
-G <- e*
+e*
 ```
 
-　Gと文字列eの照合を行うために、以下のような動作を行います。
+　eと文字列sの照合を行うために、以下のような動作を行います。
 
-1. eとsの照合を行う
-2. 1.が成功していれば、sをsのサフィックスに置き換えて、1に戻る
-3. 1.が失敗した場合、sを返し、成功する
+1. `match(e,s)`を実行する
+2. 1.が成功したとき（`n`回目）、結果を`Success(s_n,s_(n+1))`とする。`s`を`s_(n+1)`に置き換えて、1.に戻る
+3. 1.が失敗した場合（`n`回目）、結果を`Success(s_1...s_n, s[n...])`とする
 
-　`e*`は「0回以上の繰り返し」を表現するため、一回も成功しない場合でも、全体が成功するのがポイントです。
+　`e*`は「0回以上の繰り返し」を表現するため、一回も成功しない場合でも全体が成功するのがポイントです。なお、`e*`は
+
+```
+H <- e H / ε
+```
+
+ でHを呼び出すことの構文糖衣でもあり、事実全く同じ意味になります。
 
 ### 肯定述語
 
-TBD
+`e`は式であるものとします。このとき、
+
+```peg
+&e
+```
+　
+は`match(&e,s)`を実行するために、以下のような動作を行います。
+
+1. `match(e,s)`を実行する
+2. 1.が成功したとき、結果を`Success("", s)`とする
+3. 1.が失敗した場合、結果は`Failure()`とする
+
+ポイントは、肯定述語では成功したときにも「残り文字列」が変化しない点です。肯定述語`&e`は後述する否定述語`!!`を二重に重ねたものに等しいことが知られています。
 
 ### 否定述語
 
-TBD
+`e`は式であるものとします。このとき、
+
+```peg
+!e
+```
+　
+は`match(!e,s)`を実行するために、以下のような動作を行います。
+
+1. `match(e,s)`を実行する
+2. 1.が成功したとき、結果を`Failure()`とする
+3. 1.が失敗した場合、結果は`Success(""< s)`とする
+
+否定述語も肯定述語同様に成功したときにも「残り文字列」が変化しません。
+
+肯定述語`&e`は後述する否定述語`!!`を二重に重ねたものに等しいことが知られています。これは論理における二重否定に類似するものということができます。
 
 ### PEGの操作的意味論
 
-ここまでで、PEGを構成する8つの要素について説明してきましたが、実際のところやや厳密さに欠けるものでした。この挙動をより厳密に説明すると以下のようになります。
-
-（以下、Fordの論文をはりつけたもの。これをベースに日本語の説明に書き換える）
+ここまでで、PEGを構成する8つの要素について説明してきましたが、実際のところ、厳密さに欠けるものでした。この挙動をより厳密に説明すると以下のようになります（Ford:04を元に改変）。先程までの説明では、`Success(s1, s2)`を使って、`s1`までは読んだことを、残り文字列が`s2`であることを表現してきましたが、ここではペア`(n, x)`で結果を表しており、`n`はカウンタ、`x`は残り文字列または`f`（失敗を表す値）となります。
 
 ```
-1. Empty: 
-  (ε,x) ⇒ (1,ε) for any x ∈ V ∗ T.
-2. Terminal (success case): 
-  (a,ax) ⇒ (1,a) if a ∈VT , x ∈V ∗ T.
-3. Terminal (failure case):
-   (a,bx) ⇒ (1, f) if a 6= b, and (a,ε) ⇒ (1, f).
-4. Nonterminal:
-  (A,x) ⇒ (n + 1,o) if A ← e ∈ R and (e,x) ⇒ (n,o).
-5. Sequence (success case): 
-  If (e1,x1x2y) ⇒ (n1,x1) and (e2,x2y) ⇒ (n2,x2), then (e1e2,x1x2y) ⇒ (n1 +n2 +1,x1x2).  Expressions e1 and e2 are matched in sequence, and if each succeeds and consumes input portions x1 and x2 respectively, then the sequence succeeds and consumes the string x1x2.
-6. Sequence (failure case 1): 
-  If (e1,x) ⇒ (n1, f), then (e1e2,x) ⇒ (n1 + 1, f). If e1 is tested and fails, then the sequence e1e2 fails without attempting e2, 
-7. Sequence (failure case 2): 
-  If (e1,x1y) ⇒ (n1,x1) and (e2,y) ⇒ (n2, f), then (e1e2,x1y) ⇒ (n1 + n2 + 1, f). If e1 succeeds but e2 fails, then the sequence expression fails.
-8. Alternation (case 1): 
-  If (e1,xy) ⇒ (n1,x), then (e1/e2,xy) ⇒ (n1 +1,x). Alternative e1 is first tested, and if it succeeds, the expression e1/e2 succeeds without testing e2.
-9. Alternation (case 2): 
-  If (e1,x) ⇒ (n1, f) and (e2,x) ⇒ (n2,o), then (e1/e2,x) ⇒ (n1 + n2 + 1,o). If e1 fails, then e2 is tested and its result is used instead.
-10. Zero-or-more repetitions (repetition case): 
-  If (e,x1x2y) ⇒ (n1,x1) and (e∗,x2y) ⇒ (n2,x2), then (e∗,x1x2y) ⇒ (n1 + n2 +1,x1x2).
-11. Zero-or-more repetitions (termination case): 
-  If (e,x) ⇒ (n1, f), then (e∗,x) ⇒ (n1 +1,ε).
-12. Not-predicate (case 1): 
-  If (e,xy) ⇒ (n,x), then (!e,xy) ⇒ (n + 1, f). If expression e succeeds consuming input x, then the syntactic predicate !e fails.
-13. Not-predicate (case 2): 
-  If (e,x) ⇒ (n, f), then (!e,x) ⇒ (n + 1,ε). If e fails, then !e succeeds but consumes nothing.
+1. 空文字列: 
+  (ε,x) ⇒ (1,ε) （全ての x ∈ V ∗ Tに対して）。
+2. 終端記号(成功した場合): 
+  (a,ax) ⇒ (1,a) （a ∈VT , x ∈V ∗ T である場合）。
+3. 終端記号(失敗した場合):
+  (a,bx) ⇒ (1, f) もし a ≠ b かつ (a,ε) ⇒ (1, f)。
+4. 非終端記号:
+  (A,x) ⇒ (n + 1,o) もし A ← e ∈ R かつ(e,x) ⇒ (n,o)。
+5. 連接(成功した場合): 
+  もし (e1,x1x2y) ⇒ (n1,x1) かつ　(e2,x2y) ⇒ (n2,x2) のとき、 (e1e2,x1x2y) ⇒ (n1 +n2 +1,x1x2)。
+6. 連接(失敗した場合１): 
+  もし (e1,x) ⇒ (n1, f) ならば　(e1e2,x) ⇒ (n1 + 1, f). もし　e1が失敗したならば、e1e2はe2を試すことなく失敗する。
+7. 連接(失敗した場合２): 
+  もし (e1,x1y) ⇒ (n1,x1) かつ　(e2,y) ⇒ (n2, f) ならば (e1e2,x1y) ⇒ (n1 + n2 + 1, f)。
+8. 選択(場合１): 
+  もし (e1,xy) ⇒ (n1,x) ならば (e1/e2,xy) ⇒ (n1 +1,x)。
+9. 選択(場合２): 
+  もし (e1,x) ⇒ (n1, f) かつ (e2,x) ⇒ (n2,o) ならば (e1/e2,x) ⇒ (n1 + n2 + 1,o)。
+10. 0回以上の繰り返し (繰り返しの場合): 
+  もし (e,x1x2y) ⇒ (n1,x1) かつ　(e∗,x2y) ⇒ (n2,x2) ならば (e∗,x1x2y) ⇒ (n1 + n2 +1,x1x2)。
+11. 0回以上の繰り返し (停止の場合）: 
+  もし (e,x) ⇒ (n1, f) ならば (e∗,x) ⇒ (n1 +1,ε)。
+12. 否定述語（場合１): 
+  もし (e,xy) ⇒ (n,x) ならば (!e,xy) ⇒ (n + 1, f)。
+13. 否定述語（場合２): 
+  もし (e,x) ⇒ (n, f) ならば (!e,x) ⇒ (n + 1,ε)。
 ```
 
 ## 4.9 - Packrat Parsing
