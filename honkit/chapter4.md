@@ -796,6 +796,7 @@ $27 ==> Success[value=), rest=]
 
 ### 4.9.4 parseメソッドのメモ化 - Packrat Parsing
 
+4.9.3のコードをもとに`parse`メソッドをメモ化してみましょう。コードは以下のようになります。
 
 ```java
 import java.util.*;
@@ -901,6 +902,14 @@ class PackratParser {
     }
 }
 ```
+
+```java
+    private Map<String, ParseResult> cache = new HashMap<>();
+```
+
+というフィールドが加わったことです。このフィールド`cache`がパーズの途中結果を保持してくれるために計算が高速化されるのです。結果として、PEGでは最悪指数関数時間かかっていたものがPackrat Parsingでは入力長に対してたかだか線形時間で解析できるようになりました。
+
+PEGのような非常に強力な記述能力を持ちながら線形時間で構文解析を完了できるのはとても良い特性です。そういった理由もあってか、PEGやPackrat Parsingを用いた構文解析器や構文解析器生成系はここ10年くらいで大幅に増えました。
 
 ## 4.10 - Generalized LR (GLR) Parsing
 
