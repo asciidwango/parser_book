@@ -1,0 +1,27 @@
+plugins {
+    id 'java'
+    id 'idea'
+    id 'eclipse'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    testImplementation('org.junit.jupiter:junit-jupiter:5.6.2')
+}
+
+test {
+    useJUnitPlatform()
+    testLogging {
+        showStandardStreams true
+        events 'started', 'skipped', 'passed', 'failed'
+        exceptionFormat 'full'
+    }
+}
