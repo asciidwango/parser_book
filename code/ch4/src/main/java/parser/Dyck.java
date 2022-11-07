@@ -3,19 +3,20 @@ package parser;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import parser.Elements.*;
 
 public class Dyck {
     private String input;
     private int position;
     private final List<Rule> rules;
 
-    private List<Character> symbols;
+    private List<Elements.Element> symbols;
 
     public Dyck() {
         this.rules = List.of(
-                new Rule('D', "$P$"),
+                new Rule('D', List.of(new Terminal('$'), new NonTerminal('P'), new Terminal('$'))),
                 new Rule('P', "()"),
-                new Rule('P', "(P)")
+                new Rule('P', List.of(new Terminal('('), new NonTerminal('P'), new Terminal(')')))
         );
     }
 
@@ -24,7 +25,7 @@ public class Dyck {
     }
 
     private void shift() {
-        symbols.add(input.charAt(position));
+        symbols.add(new Elements.Terminal(input.charAt(position)));
         position++;
     }
 
@@ -32,7 +33,7 @@ public class Dyck {
         for(int i = 1; i <= rule.rhs().size(); i++) {
             symbols.remove(symbols.size() - 1);
         }
-        symbols.add(rule.lhs());
+        symbols.add(new Elements.NonTerminal(rule.lhs()));
     }
 
     public boolean parse(String source) {

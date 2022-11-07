@@ -28,7 +28,7 @@ D = P
 P = "(" P ")" | ""
 ```
 
-　このBNFは、カッコが正しくネストした文字列を過不足無く表現しているわけですが、このBNFを元にして自力で構文解析器を作るにはどうすればいいか考えてみましょう。おそらく、まず皆さんが素朴に思いつくのは以下のような実装ではないかと思います。
+　このBNFは、カッコが正しくネストした文字列を過不足無く表現しているわけですが、このBNFを元にして自力で構文解析器を作るにはどうすればいいか考えてみましょう。皆さんが素朴に思いつくのは以下のような実装ではないかと思います。
 
 ```java
 public class Dyck {
@@ -42,7 +42,7 @@ public class Dyck {
     public boolean P() {
         while(hasNext()) {
             String first = peekToken();
-            if(first.equals("("))) {
+            if(first.equals("(")) {
                 nextToken();
                 P();
                 String end = nextToken();
@@ -143,7 +143,56 @@ P = "(" P ")"
 1. 文字を入力文字列の内最も左から（leftmost）取り出してスタック上にプッシュする（シフト）
 2. 規則を参照して、スタックの内最も上部（右）にマッチしたら、左辺の記号に置き換える（還元）
 
-このようなシフトと還元の繰り返しをJavaコードで表すと次のようになります。
+
+このような動作をJavaコードで表現することを考えてみます。まず必要なのは、規則を表すクラス`Rule`です。問題を単純化するために、
+
+1. 規則の名前（左辺）は1文字
+2. 規則の右辺は規則名または文字のどちらかからなる並びである
+
+とします。このようなクラス`Rule`は以下のように表現することができます。
+
+```java
+public record Rule(char lhs, List<Elements.Element> rhs) {
+    private static List<Elements.Element> toElements(String string) {
+        List<Elements.Element> elements = new ArrayList<>();
+        for(int i = 0; i < string.length(); i++) {
+            elements.add(new Elements.Terminal(string.charAt(i)));
+        }
+        return elements;
+    }
+    public Rule(char lhs, String rhs) {
+        this(lhs, toElements(rhs));
+    }
+    public boolean matches(String sequence) {
+        return matches(toElements(sequence));
+    }
+    public boolean matches(List<Elements.Element> sequence) {
+        for(int i = 1; i <= rhs.size(); i++) {
+            var a = rhs.get(rhs.size() - i);
+            if(sequence.size() - i < 0) return false;
+            var b = sequence.get(sequence.size() - i);
+            if(!a.equals(b)) return false;
+        }
+        return true;
+    }
+}
+```
+
+Java 17のレコード機能を使って、クラス`Rule`が左辺（`lhs`)と右辺（`rhs`）持っていることを表現しています。また、クラス`Elements.Element`は規則の右辺に出現できる要素を表す型で次のように表現されます。
+
+```java
+public class Elements {
+    public sealed interface Element permits NonTerminal, Terminal {}
+    public record NonTerminal(char name) implements Element {}
+    public record Terminal(char value) implements Element {}
+}
+```
+
+非終端記号（`NonTerminal`）は規則の名前を表す文字`name`を引数に取ります。また、文字そのものを表現する終端記号（`Terminal`）は文字そのものを表現する文字`value`を引数に取ります。
+
+たとえば、`new Elements.NonTerminal('A')`は非終端記号`A`を表しますし、`new Elements.Terminal('a')`は終端記号`'a'`を表します。ここまでは特に難しいところはないと言えるでしょう。
+
+これらのクラスを使ってシフトと還元を行うクラス`Dyck`は次のように定義することができます。
 
 ```java
 public class Dyck {
@@ -151,13 +200,13 @@ public class Dyck {
     private int position;
     private final List<Rule> rules;
 
-    private List<Character> symbols;
+    private List<Elements.Element> symbols;
 
     public Dyck() {
         this.rules = List.of(
-                new Rule('D', "$P$"),
+                new Rule('D', List.of(new Terminal('$'), new NonTerminal('P'), new Terminal('$'))),
                 new Rule('P', "()"),
-                new Rule('P', "(P)")
+                new Rule('P', List.of(new Terminal('('), new NonTerminal('P'), new Terminal(')')))
         );
     }
 
@@ -166,7 +215,7 @@ public class Dyck {
     }
 
     private void shift() {
-        symbols.add(input.charAt(position));
+        symbols.add(new Elements.Terminal(input.charAt(position)));
         position++;
     }
 
@@ -174,7 +223,7 @@ public class Dyck {
         for(int i = 1; i <= rule.rhs().size(); i++) {
             symbols.remove(symbols.size() - 1);
         }
-        symbols.add(rule.lhs());
+        symbols.add(new Elements.NonTerminal(rule.lhs()));
     }
 
     public boolean parse(String source) {
@@ -197,7 +246,22 @@ public class Dyck {
 ```
 ボトムアップ型構文解析のJavaコード
 
-もちろんこれはあくまで基本であり、トップダウン型の構文解析アルゴリズムが多数あるようにボトムアップ型の構文解析アルゴリズムも多数あります。構文解析器生成系の中で最も著名であると思われるyaccが採用しているLALR(1)もボトムアップ型の構文解析アルゴリズムの一つです。LALR(1)は上記のような単純なアプローチよりもう少し複雑ですがこれについては後述します。
+メソッド`shift()`がシフト動作を`reduce()`が還元動作を表しています。`shift()`は以下のように、単に入力記号列`input`から一文字読み込んで`symbols`に追加しています。
+
+```java
+    private void reduce(Rule rule) {
+        for(int i = 1; i <= rule.rhs().size(); i++) {
+            symbols.remove(symbols.size() - 1);
+        }
+        symbols.add(new Elements.NonTerminal(rule.lhs()));
+    }
+```
+
+一方、`reduce()`は`rule`を引数にとり、`rule`の右辺の長さ分を`symbols`の末尾から削除した後に左辺の非終端記号を追加しています。
+
+最後に`parse()`では入力の末尾位置に到達するまで、シフトと還元動作を繰り返します。クラス`Dyck`の行数は50行程度ですが、最も単純なボトムアップ構文解析法はこのくらい単純に書くことができるのです。
+
+もちろんこれはあくまで基本であり、ボトムアップ型の構文解析アルゴリズムも実用上はここまで単純ではなく、もう少し改良を加えたLR法やLALR法が使われています。構文解析器生成系の中で最も著名であると思われるyacc(bison)が採用しているLALR(1)もボトムアップ型の構文解析アルゴリズムの一つです。
 
 トップダウン構文解析法とボトムアップ構文解析法はそれぞれ得手不得手があります。トップダウン型は規則と関数を対応付けるのが容易なので手書きの構文解析器を書くのに向いています。また、関数の引数として現在の情報を渡して、引数に応じて構文解析の結果を変化させることが比較的容易です。これは複雑で文脈に依存した文法を持った言語を解析するときに有利な性質です。しかし、トップダウン型は左再帰という形の文法をそのまま処理できないという欠点があります。
 
@@ -215,13 +279,13 @@ A = "a" A
   | "";
 ```
 
-では、左再帰を問題なく処理できるボトムアップ型が一方的に有利なのかというとそう単純ではないのが面白いところです。ボトムアップ型は一般的に構文解析エラーが読み取りづらくなるという欠点がありますし、トップダウン型が得意とする、前後の文脈に応じて構文解析結果を切り替えるのは比較的苦手です。もちろん、出来ない訳ではありません。
+では、左再帰を問題なく処理できるボトムアップ型が一方的に有利なのかというとそう単純ではないのが面白いところです。ボトムアップ型は一般的に構文解析エラーが読み取りづらくなるという欠点があります。トップダウン型が得意とする、前後の文脈に応じて構文解析結果を切り替えるのは比較的苦手です。
 
-さて、トップダウン型とボトムアップ型の概要を説明したところで、いよいよ次からは具体的なアルゴリズムの説明に移ります。
+さて、トップダウン型とボトムアップ型の概要を説明したところで、からは具体的なアルゴリズムの説明に移ります。
 
 ## 4.2 LL(1) - 代表的なトップダウン構文解析アルゴリズム
 
-トップダウン型構文解析アルゴリズムの中でおそらくもっとも古典的で、よく知られているのは`LL(1)`構文解析アルゴリズムです。なんか一見小難しく見えますよね。しかし、`LL(1)`のイメージというのは意外に簡単なものです。
+トップダウン型構文解析アルゴリズムの中でおそらくもっとも古典的で、よく知られているのは`LL(1)`構文解析アルゴリズムです。字面が一見小難しく見えますよね。しかし、`LL(1)`のアイデアは意外に簡単なものです。
 
 たとえば、以下のようなJava言語のif文があったとします。
 
@@ -233,7 +297,7 @@ if(age < 18) {
 }
 ```
 
-非常に簡単ですよね。しかし、我々は如何にしてこれを見て「if文がある」と認識するのでしょうか。もちろん「人それぞれ」なのですが、最初に`if`が現れたからif文だと考える人も多いのではないかと思います。
+非常に簡単です。しかし、我々はどのようにしてこれを見て「if文がある」と認識するのでしょうか。もちろん「人それぞれ」なのですが、最初に`if`が現れたからif文だと考える人も多いのではないかと思います。
 
 `LL(1)`構文解析アルゴリズムはまさにこのイメージを元にした手法です。プログラムをトークン列に区切った後に、「最初の1トークン」を見て、「あ、これはif文だ」とか「あ、これはwhile文だ」とか認識するようなものですね。
 
