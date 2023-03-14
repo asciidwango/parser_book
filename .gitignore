@@ -6,3 +6,7 @@ classes/
 .idea/
 .gradle/
 build/
+
+y.tab.c
+lex.yy.c
+parser
