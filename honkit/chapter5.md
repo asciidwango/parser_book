@@ -177,17 +177,168 @@ options {
 
 また、JavaCCは構文定義ファイルの文法がかなりJavaに似ているため、生成されるコードの形を想像しやすいというメリットがあります。JavaCCはJavaの構文解析生成系の中では最古の部類の割に今でも現役で使われているのは、Javaユーザにとっての使いやすさが背景にあるように思います。
 
-## 5.4 ANTLR
+
+## 5.4 Yacc (GNU Bison)
+
+YaccはYet another compiler compilerの略で、日本語にすると「もう一つのコンパイラコンパイラ」といったところでしょうか。yaccができた当時は、コンパイラを作るためのコンパイラについての研究が盛んだった時期で、構文解析器生成系もそのための研究の副産物とも言えます。1970年代にAT&Tのベル研究所にいたStephen C. Johnsonによって作られたソフトウェアで、非常に歴史がある構文解析器生成系です。YaccはLALR(1)法をサポートし、lexという字句解析器生成系と連携することで構文解析器を生成することができます（もちろん、lexを使わない実装も可能）。Yacc自体は色々な構文解析器生成系に多大な影響を与えており、現在使われているGNU BisonはYaccのGNUによる再実装でもあります。
+
+Yaccを使って、四則演算を行う電卓プログラムを作るにはまず字句解析器生成系であるflex用の定義ファイルを書く必要ががあります。その定義ファイル`token.l`は次のようになります：
+
+```lex
+%{
+#include "y.tab.h"
+%}
+
+%%
+[0-9]+      { yylval = atoi(yytext); return NUM; }
+[-+*/()]    { return yytext[0]; }
+[ \t]       { /* ignore whitespce */ }
+"\r\n"      { return EOL; }
+"\r"        { return EOL; }
+"\n"        { return EOL; }
+.           { printf("Invalid character: %s\n", yytext); }
+%%
+```
+
+`%%`から`%%`までがトークンの定義です。これはそれぞれ次のように読むことができます。
+
+- `[0-9]+      { yylval = atoi(yytext); return NUM; }`
+
+  0-9までの数字が1個以上あった場合はに数値として解釈し（`atoi(yytext)`)、トークン`NUM`として返します。
+
+- `[-+*/()]    { return yytext[0]; }`
+
+  `-`,`+`,`*`,`/`,`(`,`)`についてはそれぞれの文字をそのままトークンとして返します。
+
+- `[ \t]       { /* ignore whitespce */ }`
+
+  タブおよびスペースは単純に無視します
+
+- `"\r\n"      { return EOL; }`
+
+  改行はEOLというトークンとして返します
+
+- `"\r"        { return EOL; }`
+
+  前に同じ
+
+- `"\n"        { return EOL; }`
+
+  前に同じ
+
+- `.           { printf("Invalid character: %s\n", yytext); }`
+
+  それ以外の文字が来たらエラーを吐きます
+
+このトークン定義ファイルを入力として与えると、flexは`lex.yy.c`という形で字句解析器を出力します。
+
+次に、yaccの構文定義ファイルを書きます：
+
+```yacc
+%{
+#include <stdio.h>
+int yylex(void);
+void yyerror(char const *s);
+int yywrap(void) {return 1;}
+extern int yylval;
+%}
+
+%token NUM
+%token EOL
+%left '+' '-'
+%left '*' '/'
+
+%%
+
+input : expr EOL
+      { printf("Result: %d\n", $1); }
+      ;
+
+expr : NUM
+      { $$ = $1; }
+      | expr '+' expr
+      { $$ = $1 + $3; }
+      | expr '-' expr
+      { $$ = $1 - $3; }
+      | expr '*' expr
+      { $$ = $1 * $3; }
+      | expr '/' expr
+      {
+        if ($3 == 0) { yyerror("Cannot divide by zero."); }
+        else { $$ = $1 / $3; }
+      }
+      | '(' expr ')'
+      { $$ = $2; }
+      ;
+
+
+void yyerror(char const *s)
+{
+  fprintf(stderr, "Parse error: %s\n", s);
+}
+
+int main()
+{
+  yyparse();
+}
+```
+
+flexの場合と同じく、`%%`から`%%`までが構文規則の定義の本体です。実行されるコードが入っているので読みづらくなっていますが、それを除くと以下のようになります：
+
+```yacc
+% {
+%token NUM
+%token EOL
+%left '+' '-'
+%left '*' '/'
+}
+
+%%
+input : expr EOL
+      { printf("Result: %d\n", $1); }
+      ;
+
+expr : NUM
+      | expr '+' expr
+      | expr '-' expr
+      | expr '*' expr
+      | expr '/' expr
+      | '(' expr ')'
+      ;
+%%
+```
+
+だいぶ見やすくなりましたね。入力を表す`input`規則は`expr EOL`からなります。`expr`は式を表す規則ですから、その後に改行が来れば`input`は終了となります。
+
+次に、`expr`規則ですが、ここではyaccの優先順位を表現するための機能である`%left`を使ったため、優先順位のためだけに規則を作る必要がなくなっており、定義が簡潔になっています。ともあれ、こうして定義された文法定義ファイルをyaccに与えると`y.tab.c`というファイルを出力します。
+
+flexとyaccが出力したファイルを結合して実行ファイルを作ると、次のような入力に対して：
+
+```
+1 + 2 * 3
+2 + 3
+6 / 2
+3 / 0
+```
+
+それぞれ、次のような出力を返します。
+
+```
+Result: 7
+Result: 5
+Result: 3
+Parse error: Cannot divide by zero.
+```
+
+yaccはとても古いソフトウェアの一つですが、Rubyの文法定義ファイルparse.yはyacc用ですし、未だに各種言語処理系では現役で使われてもいます。
+
+## 5.5 ANTLR
 
 1989年にPurdue Compiler Construction set(PCCTS)というものがありました、ANTLRはその後継というべきもので、これまでに、LL(k) -> LL(*) -> ALL(*)と取り扱える文法の幅を広げつつアクティブに開発が続けられています。作者はTerence Parrという方ですが、構文解析器一筋（？）と言っていいくらい、ANTLRにこれまでの時間を費やしてきている人です。
 
 それだけに、ANTLRの完成度は非常に高いものになっています。また、一時期はLR法に比べてLL法の評価は低いものでしたが、Terence ParrがLL(k)を改良していく過程で、LL(*)やALL(*)のようなLR法に比べてもなんら劣らない、しかも実用的にも使いやすい構文解析法の発明に貢献したということができます。
 
 ANTLRはJava、C++などいくつもの言語を扱うことができますが、特に安心して使えるのはJavaです。以下は先程と同様の、四則演算を解析できる数式パーザをANTLRで書いた場合の例です。
-
-## 5.5 Yacc (GNU Bison)
-
-YaccはYet another compiler compilerの略で、日本語にすると「もう一つのコンパイラコンパイラ」といったところでしょうか。yaccができた当時は、コンパイラを作るためのコンパイラについての研究が盛んだった時期で、構文解析器生成系もそのための研究の副産物とも言えます。1970年代にAT&Tのベル研究所にいたStephen C. Johnsonによって作られたソフトウェアで、非常に歴史がある構文解析器生成系です。YaccはLALR(1)法をサポートし、lexという字句解析器生成系と連携することで構文解析器を生成することができます（もちろん、lexを使わない実装も可能）。Yacc自体は色々な構文解析器生成系に多大な影響を与えており、現在使われているGNU BisonはYaccのGNUによる再実装でもあります。
 
 ## 5.6 Coco/R
 
