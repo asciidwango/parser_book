@@ -1,0 +1,51 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+<modelVersion>4.0.0</modelVersion>
+<groupId>com.github.kmizu</groupId>
+<artifactId>calculator</artifactId>
+<packaging>jar</packaging>
+<version>0.10-SNAPSHOT</version>
+<name>calculator</name>
+<url>https://github.com/asciidwango/parser_book</url>
+<properties>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+</properties>
+<dependencies>
+        <dependency>
+                <groupId>org.junit.jupiter</groupId>
+                <artifactId>junit-jupiter-api</artifactId>
+                <version>5.8.2</version>
+                <scope>test</scope>
+        </dependency>
+        <dependency>
+                <groupId>org.junit.jupiter</groupId>
+                <artifactId>junit-jupiter-engine</artifactId>
+                <version>5.8.2</version>
+                <scope>test</scope>
+        </dependency>
+</dependencies>
+<build>
+        <plugins>
+                <plugin>
+                        <groupId>com.helger.maven</groupId>
+                        <artifactId>ph-javacc-maven-plugin</artifactId>
+                        <version>4.1.4</version>
+                        <executions>
+                                <execution>
+                                        <id>javacc</id>
+                                        <phase>generate-sources</phase>
+                                        <goals>
+                                                <goal>javacc</goal>
+                                        </goals>
+                                        <configuration>
+                                                <jdkVersion>17</jdkVersion>
+                                                <sourceDirectory>src/main/java/com/github/kmizu/calculator</sourceDirectory>
+                                                <outputDirectory>${project.build.directory}/generated-sources/javacc</outputDirectory>
+                                        </configuration>
+                                </execution>
+                        </executions>
+                </plugin>
+        </plugins>
+</build>
+</project>
