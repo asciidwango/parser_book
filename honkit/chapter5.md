@@ -36,6 +36,7 @@ public boolean parseD() {
 public boolean parseP() {
     "(" P ")" | "()"
 }
+```
 
 ## 5.1 JSONの構文解析器を生成する
 
