@@ -341,6 +341,48 @@ yaccはとても古いソフトウェアの一つですが、Rubyの文法定義
 
 ANTLRはJava、C++などいくつもの言語を扱うことができますが、特に安心して使えるのはJavaです。以下は先程と同様の、四則演算を解析できる数式パーザをANTLRで書いた場合の例です。
 
+ANTLRでは構文規則は、`規則名 : 本体 ;` という形で記述しますが、LLパーザ向けの構文定義を素直に書き下すだけでOKです。
+
+```java
+grammar Expression;
+
+expression returns [int e]
+    : v=additive {$e = $v.e;}
+    ;
+
+additive returns [int e]
+    : l=additive op='+' r=multitive {$e = $l.e + $r.e;}
+    | l=additive op='-' r=multitive {$e = $l.e - $r.e;}
+    | v=multitive {$e = $v.e;}
+    ;
+
+multitive returns [int e]
+    : l=multitive op='*' r=primary {$e = $l.e * $r.e;}
+    | l=multitive op='/' r=primary {$e = $l.e / $r.e;}
+    | v=primary {$e = $v.e;}
+    ;
+
+primary returns [int e]
+    : n=NUMBER {$e = Integer.parseInt($n.getText());}
+    | '(' x=expression ')' {$e = $x.e;}
+    ;
+
+LP
+   : '('
+   ;
+
+RP : ')'
+   ;
+
+NUMBER
+    : INT
+    ;
+
+fragment INT :   '0' | [1-9] [0-9]* ; // no leading zeros
+
+WS  :   [ \t\n\r]+ -> skip ;
+```
+
 ## 5.6 Coco/R
 
 Coco/Rは少々マイナーですが、一つの構文解析器生成系で多くのプログラミング言語に対応しているという点で珍しい構文解析器生成系です。
