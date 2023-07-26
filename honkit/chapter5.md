@@ -350,6 +350,54 @@ expression returns [int e]
     : v=additive {$e = $v.e;}
     ;
 
+additive returns [int e = 0;]
+    : l=multitive {$e = $l.e;} (
+      '+' r=multitive {$e = $e + $r.e;}
+    | '-' r=multitive {$e = $e - $r.e;}
+    )*
+    ;
+
+multitive returns [int e = 0;]
+    : l=primary {$e = $l.e;} (
+      '*' r=primary {$e = $e * $r.e;}
+    | '/' r=primary {$e = $e / $r.e;}
+    )*
+    ;
+
+primary returns [int e]
+    : n=NUMBER {$e = Integer.parseInt($n.getText());}
+    | '(' x=expression ')' {$e = $x.e;}
+    ;
+
+LP : '(' ;
+RP : ')' ;
+NUMBER : INT ;
+fragment INT :   '0' | [1-9] [0-9]* ; // no leading zeros
+WS  :   [ \t\n\r]+ -> skip ;
+
+```
+
+規則`expression`が数式を表す規則です。そのあとに続く`returns [int e]`はこの規則を使って解析を行った場合に`int`型の値を返すことを意味しています。これまで見てきたように構文解析器をした後には抽象構文木をはじめとして何らかのデータ構造を返す必要があります。`returns ...`はそのために用意されている構文です。名前が全て大文字の規則はトークンを表しています。
+
+数式を表す各規則についてはこれまで書いてきた構文解析器と同じ構造なので読むのに苦労はしないでしょう。
+
+規則`WS`は空白文字を表すトークンですが、これは数式を解析する上では読み飛ばす必要があります。 `[ \t\n\r]+ -> skip`は
+
+- スペース
+- タブ文字
+- 改行文字
+
+のいずれかが出現した場合は読み飛ばすということを表現しています。
+
+ANTLRはトップダウン型の構文解析が苦手とする左再帰もある程度扱うことができます。先程の定義ファイルでは繰り返しを使っていましたが、これを左再帰に直した以下の定義ファイルも全く同じ挙動をします。
+
+```java
+grammar LRExpression;
+
+expression returns [int e]
+    : v=additive {$e = $v.e;}
+    ;
+
 additive returns [int e]
     : l=additive op='+' r=multitive {$e = $l.e + $r.e;}
     | l=additive op='-' r=multitive {$e = $l.e - $r.e;}
@@ -367,21 +415,14 @@ primary returns [int e]
     | '(' x=expression ')' {$e = $x.e;}
     ;
 
-LP
-   : '('
-   ;
-
-RP : ')'
-   ;
-
-NUMBER
-    : INT
-    ;
-
+LP : '(' ;
+RP : ')' ;
+NUMBER : INT ;
 fragment INT :   '0' | [1-9] [0-9]* ; // no leading zeros
-
 WS  :   [ \t\n\r]+ -> skip ;
 ```
+
+左再帰を使うことでより簡単に文法を定義できることもあるので、あると嬉しい機能だと言えます。
 
 ## 5.6 Coco/R
 

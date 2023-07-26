@@ -1,9 +1,7 @@
-package com.github.asciidwango.parser_book.expression;
+package com.github.asciidwango.parser_book.ch5;
 
 import org.antlr.v4.runtime.ANTLRInputStream;
 import org.antlr.v4.runtime.CommonTokenStream;
-import org.antlr.v4.runtime.Lexer;
-import org.antlr.v4.runtime.TokenStream.*;
 
 import java.io.IOException;
 import java.io.StringReader;

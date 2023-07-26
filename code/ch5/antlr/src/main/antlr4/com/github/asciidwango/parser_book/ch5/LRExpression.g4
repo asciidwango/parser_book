@@ -1,4 +1,4 @@
-grammar Expression;
+grammar LRExpression;
 
 expression returns [int e]
     : v=additive {$e = $v.e;}
