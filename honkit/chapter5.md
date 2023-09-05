@@ -469,6 +469,53 @@ element returns [Element e]
 
 ANTLRでは通常のLLパーザで文法を記述する上での大きな制約がないわけで、これは非常に強力です。理論的な意味での記述能力でも`ALL(*)`アルゴリズムは任意の決定的な文脈自由言語を取り扱うことができます。
 
-## 5.6 Coco/R
+また、`ALL(*)`アルゴリズム自体とは関係ありませんが、XMLのパーザを書くときには開きタグと閉じタグの名前が一致している必要があります。この条件を記述するために`PetitXML`では次のように記述されています。
 
-Coco/Rは少々マイナーですが、一つの構文解析器生成系で多くのプログラミング言語に対応しているという点で珍しい構文解析器生成系です。
+```java 
+'<' begin=NAME '>' es=elements '</' end=NAME '>' {$begin.text.equals($end.text)}?
+```
+
+この中の`{$begin.text.equals($end.text)}?`という部分はsemantic predicateと呼ばれ、プログラムとして書かれた条件式が真になるときにだけマッチします。semantic predicateのような機能はプログラミング言語をそのまま埋め込むという意味で、正直「あまり綺麗ではない」と思わなくもないですが、実用上はsemantic predicateを使いたくなる場面にしばしば遭遇します。
+
+ANTLRはこういった実用上重要な痒いところにも手が届くように作られており、非常によくできた構文解析機生成系といえるでしょう。
+
+## 5.6 SComb
+
+せっかくなので手前味噌ですが、拙作のパーザコンビネータである[SComb](https://github.com/kmizu/scomb)も紹介しておきます。これまで紹介してきたものは構文解析器生成系であって、独自の言語を用いて文法を記述し、そこから何かしらの言語（CであったりJavaであったり）で書かれた構文解析器を生成するものだったわけですが、パーザコンビネータは少々趣が違います。
+
+パーザコンビネータではその言語の関数やオブジェクトとして構文解析器を定義し、演算子やメソッドによって構文解析器を組み合わせることで構文解析器を組み立てていきます。パーザコンビネータではメソッドや関数として文法規則自体を記述するため、特別にプラグインなどを作らなくてもIDEによる支援が受けられることや、対象言語が静的型システムを持っていた場合、型チェックによる支援を受けられることなどがメリットとして挙げられます。
+
+SCombで四則演算を解析できるプログラムを書くと以下のようになります。
+
+```scala
+object Calculator extends SCombinator {
+  def root: Parser[Int] = expression
+
+  def expression: Parser[Int] = rule(A)
+
+  def A: Parser[Int] = rule(chainl(M) {
+    $("+").map { op => (lhs: Int, rhs: Int) => lhs + rhs } |
+    $("-").map { op => (lhs: Int, rhs: Int) => lhs - rhs }
+  })
+
+  def M: Parser[Int] = rule(chainl(P) {
+    $("*").map { op => (lhs: Int, rhs: Int) => lhs * rhs } |
+    $("/").map { op => (lhs: Int, rhs: Int) => lhs / rhs }
+  })
+
+  def P: P[Int] = rule{
+    (for {
+      _ <- string("("); e <- expression; _ <- string(")")} yield e) | number
+  }
+  
+  def number: P[Int] = rule(set('0'to'9').+.map{ digits => digits.mkString.toInt})
+
+  def parse(input: String): Result[Int] = parse(root, input)
+}
+```
+
+Scalaは元々DSLの記述に向いている言語なのですが、そのパワーを使ってかなり簡潔に記述できています。`chainl`というメソッドについては見慣れない読者の方も多いかともいますが、パーザコンビネータの世界では比較的よく使われる演算子で、特に二項演算を簡潔に記述するのに使われます。
+
+また、for式を用いて、必要な部分だけ値を取り出して計算を行っています。
+
+筆者は自作言語Klassicの処理系作成のためなどにSCombを使っていますが、かなり複雑な文法を記述できるにも関わらず、SCombのコア部分はわずか600行ほどです。それでいて高い拡張性や簡潔な記述が可能なのは、Scalaという言語の能力とPEGという手法のシンプルさがあってのものだと言えるでしょう。
