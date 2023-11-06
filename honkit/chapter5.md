@@ -554,7 +554,7 @@ assert 7 == result.value();
 最終的には先程のような算術式を解析できるようなパーザコンビネータが作れるようになるのが目標ですが、その前にパーザコンビネータの基本となる「部品」を作る必要があります。特に、
 
 - 引数として文字列を受け取って、その文字列を解析できるパーザを返す`string()`メソッド
-  -  `JParser<String> string(String input);`
+  -  `JParser<String> string(String literal);`
 - パーザを受け取って、`Result<T>`を別の型`Result<U>`に変換する`map()`メソッド
   - `<T, U> JParser<U> map(Parser<T> parser, Function<T, U> function);`
 - 二つのパーザを受け取って「選択」パーザを返す`alt()`メソッド
@@ -565,3 +565,276 @@ assert 7 == result.value();
   - `<T> JParser<T> rep(Parser<T> p);`
 
 は是非ほしいところです。
+
+#### 5.7.1.1 `string()`メソッド
+
+まず最初に`string()`メソッドで返す`JParser<String>`の中身を作ってみましょう。中身は以下のクラスのようになります。
+
+```java
+class JLiteralParser implements JParser<String> {
+  private String literal;
+  public JLiteralParser(String literal) {
+    this.literal = literal;
+
+  }
+  public Result<String> parse(String input) {
+    if(input.startsWith(literal)) {
+      return new Result<String>(literal, input.substring(literal.length()));
+    } else {
+      return null;
+    }
+  }
+}
+```
+
+リテラルを表すフィールド`literal`が`input`の先頭とマッチした場合、`Result<String>`を返します。そうでない場合は返すべき`Result`がないので`null`を返します。簡単ですね。あとはこのクラスのインスタンスを返す`string()`メソッドを作成するだけです。
+
+```java
+JParser<String> string(String literal) {
+  return new JLiteralParser(literal);
+}
+```
+
+使う時は次のようになります。
+
+```java
+JParser<String> foo = string("foo_bar");
+foo.parse("foo"); // Result<String>("foo", "_bar")
+foo.parse("baz"); // null
+```
+
+#### 5.7.1.2 `alt()`メソッド
+
+次に二つのパーザを取って「選択」パーザを返すメソッド`alt()`を実装します。先程のようにクラスを実装してもいいですが、メソッドは一つだけなのでラムダ式にしてみます。
+
+```java
+// p1 / p2
+    public static <A> JParser<A> alt(JParser<A> p1, JParser<A> p2) {
+        return (input) -> {
+            var result = p1.parse(input);
+            if(result != null) return result;
+            return p2.parse(input);
+        };
+    }
+```
+
+これは実質的には以下のような匿名クラスを書いたのと同じになります。
+
+```java
+    public static <A> JParser<A> alt(JParser<A> p1, JParser<A> p2) {
+        return new JAltParser<A>(p1, p2);
+    }
+
+class JAltParser<A> implements JParser<A> {
+  private JParser<A> p1, p2;;
+  public JAltParser(Parser<A> p1, Parser<A> p2) {
+    this.p1 = p1;
+    this.p2 = p2;
+  }
+  public Result<String> parse(String input) {
+    var result = p1.parse(input);
+    if(result != null) return result;
+    return p2.parse(input);
+  }
+}
+```
+
+PEGの`/`の定義を思い出して欲しいのですが、最初に試したパーザが失敗したときのみ次のパーザを試すのでした。ですから、このシンプルな定義でうまく行くのです。
+
+#### 5.7.1.3 `seq()`メソッド
+
+次に二つのパーザを取って「連接」パーザを返すメソッド`seq()`を実装します。先程と同じくラムダ式にしてみます。
+
+```java
+record Pair<A, B>(A a, B b){}
+// p1 p2
+    public static <A, B> JParser<Pair<A, B>> seq(JParser<A> p1, JParser<B> p2) {
+        return (input) -> {
+            var result1 = p1.parse(input);
+            if(result1 == null) return null;
+            var rest = result1.rest();
+            var result2 = p2.parse(rest);
+            if(result2 == null) return null;
+            return new Result<>(new Pair<A, B>(result1.value(), result2.value()), result2.rest());
+        };
+    }
+```
+
+先程の`alt()`メソッドと似通った実装ですが、p1が失敗したら全体が失敗する（nullを返す）のがポイントですね。p1とp2の両方が成功した場合は、二つの値のペアを返しています。二つの値のペアはレコード型を使ってシンプルに`record Pair<A, B>(...){}`として実装しました。
+
+#### 5.7.1.4 `rep0()`, `rep1()`メソッド
+
+PEGでパーザを組み立てるのに必要な基本要素はここまでで既に実装しましたが、シンタックスシュガーとしての繰り返し（`p*`, `p+`）も使い勝手の上で重要なので実装します。`p*`は`rep0()`メソッド、`p+`は`rep1()`メソッドとして実装します。
+
+まず、`rep0()`メソッドは次のようになります。
+
+```java
+    public static <A> JParser<List<A>> rep0(JParser<A> p) {
+        return (input) -> {
+            var result = p.parse(input);
+            if(result == null) return new Result<>(List.of(), input);
+            var value = result.value();
+            var rest = result.rest();
+            var result2 = rep0(p).parse(rest);
+            if(result2 == null) return new Result<>(List.of(value), rest);
+            List<A> values = new ArrayList<>();
+            values.add(value);
+            values.addAll(result2.value());
+            return new Result<>(values, result2.rest());
+        };
+    }
+```
+
+パーザpを適用して、失敗した場合空リストからなる結果を返し、そうでなければ自身を再帰的に呼び出す。シンプルな実装ですね。同様にして`rep1()`も実装することができます。
+
+
+```java 
+    public static <A> JParser<List<A>> rep1(JParser<A> p) {
+        return (input) -> {
+            var result = p.parse(input);
+            if(result == null) return null;
+            var value = result.value();
+            var rest = result.rest();
+            var result2 = rep0(p).parse(rest);
+            if(result2 == null) return new Result<>(List.of(value), rest);
+            List<A> values = new ArrayList<>();
+            values.add(value);
+            values.addAll(result2.value());
+            return new Result<>(values, result2.rest());
+        };
+    }
+```
+
+あとは、既に作られたパーザを加工して別の値を生成するためのメソッド`map()`を`JParser`に実装してみましょう。インタフェースの`default`メソッドが使えます。
+
+
+```java
+interface JParser<R> {
+    Result<R> parse(String input);
+
+    default <T> JParser<T> map(Function<R, T> f) {
+        return (input) -> {
+            var result = this.parse(input);
+            if (result == null) return null;
+            return new Result<>(f.apply(result.value()), result.rest());
+        };
+    }
+}
+```
+
+パーザを遅延評価するためのメソッド`lazy()`も導入します。後述するサンプルで必要になります。
+
+```java
+ public static <A> JParser<A> lazy(Supplier<JParser<A>> supplier) {
+        return (input) -> supplier.get().parse(input);
+    }
+```
+
+ここまでで最低限の部品は出揃ったのですが、せっかくなので正規表現を扱えるようなメソッド`regex()`も導入してみましょう。
+
+```java
+    public static JParser<String> regex(String regex) {
+        return (input) -> {
+            var matcher = Pattern.compile(regex).matcher(input);
+            if(matcher.lookingAt()) {
+                return new Result<>(matcher.group(), input.substring(matcher.end()));
+            } else {
+                return null;
+            }
+        };
+    }
+```
+
+引数として与えられた文字列を`Pattern.compile()`で正規表現に変換して、マッチングを行うだけです。これで後でパーザコンビネータで
+`regex("[0-9]+)`のような表現を使えるようになります。
+
+さて、ここまでで作ったパーザコンビネータ`JComb`を使っていよいよ簡単な算術式のインタプリタを書いてみましょう。仕様は次の通りです。
+
+- 扱える数値は整数のみ
+- 演算子は加減乗除（`+|-|*|/`）のみ
+- `()`によるグルーピングができる
+
+まず実装だけを提示すると次のようになります。
+
+```java
+   public JParser<Integer> expression() {
+        /*
+         * expression <- additive ( ("+" / "-") additive )*
+         */
+        return seq(
+                lazy(() -> additive()),
+                rep0(
+                        seq(
+                                alt(string("+"), string("-")),
+                                lazy(() -> additive())
+                        )
+                )
+        ).map(p -> {
+            var left = p.a();
+            var rights = p.b();
+            for (var right : rights) {
+                var op = right.a();
+                var rightValue = right.b();
+                if (op.equals("+")) {
+                    left += rightValue;
+                } else {
+                    left -= rightValue;
+                }
+            }
+            return left;
+        });
+    }
+
+    public JParser<Integer> additive() {
+        /*
+         * additive <- primary ( ("*" / "/") primary )*
+         */
+        return seq(
+                lazy(() -> primary()),
+                rep0(
+                        seq(
+                                alt(string("*"), string("/")),
+                                lazy(() -> primary())
+                        )
+                )
+        ).map(p -> {
+            var left = p.a();
+            var rights = p.b();
+            for (var right : rights) {
+                var op = right.a();
+                var rightValue = right.b();
+                if (op.equals("*")) {
+                    left *= rightValue;
+                } else {
+                    left /= rightValue;
+                }
+            }
+            return left;
+        });
+    }
+
+    public JParser<Integer> primary() {
+        /*
+         * primary <- number / "(" expression ")"
+         */
+        return alt(
+                number,
+                seq(
+                        string("("),
+                        seq(
+                            lazy(() -> expression()),
+                            string(")")
+                        )
+                ).map(p -> p.b().a())
+        );
+    }
+    
+    // number <- [0-9]+
+    JParser<Integer> number = regex("[0-9]+").map(Integer::parseInt);
+```
+
+コメントに対応するPEGを付加してありますが、表記は冗長なもののほぼPEGに一対一に対応しているのがわかるのではないでしょうか？
+
+TODO：解説を色々と
+
+このように、パーザコンビネータを使うと、パーザジェネレータを作るには割に合わないケースでも気軽にパーザを組み立てるだめのDSL（Domain Specific Language）を定義できるのです。
