@@ -611,9 +611,9 @@ foo.parse("baz"); // null
 // p1 / p2
     public static <A> JParser<A> alt(JParser<A> p1, JParser<A> p2) {
         return (input) -> {
-            var result = p1.parse(input);
-            if(result != null) return result;
-            return p2.parse(input);
+            var result = p1.parse(input);//(1)
+            if(result != null) return result;//(2)
+            return p2.parse(input);//(3)
         };
     }
 ```
@@ -639,7 +639,7 @@ class JAltParser<A> implements JParser<A> {
 }
 ```
 
-PEGの`/`の定義を思い出して欲しいのですが、最初に試したパーザが失敗したときのみ次のパーザを試すのでした。ですから、このシンプルな定義でうまく行くのです。
+PEGの`/`の定義を思い出して欲しいのですが、最初に試した式が失敗したときのみ次の式を試すのでした。ですから、(1)(2)(3)のシンプルな実装でうまく行くのです。
 
 #### 5.7.1.3 `seq()`メソッド
 
@@ -671,11 +671,11 @@ PEGでパーザを組み立てるのに必要な基本要素はここまでで�
 ```java
     public static <A> JParser<List<A>> rep0(JParser<A> p) {
         return (input) -> {
-            var result = p.parse(input);
-            if(result == null) return new Result<>(List.of(), input);
+            var result = p.parse(input); // (1)
+            if(result == null) return new Result<>(List.of(), input); // (2)
             var value = result.value();
             var rest = result.rest();
-            var result2 = rep0(p).parse(rest);
+            var result2 = rep0(p).parse(rest); //(3)
             if(result2 == null) return new Result<>(List.of(value), rest);
             List<A> values = new ArrayList<>();
             values.add(value);
@@ -685,7 +685,7 @@ PEGでパーザを組み立てるのに必要な基本要素はここまでで�
     }
 ```
 
-パーザpを適用して、失敗した場合空リストからなる結果を返し、そうでなければ自身を再帰的に呼び出す。シンプルな実装ですね。同様にして`rep1()`も実装することができます。
+パーザpを適用して（1）、失敗した場合空リストからなる結果を返し(2)、そうでなければ自身を再帰的に呼び出す(3)。シンプルな実装ですね。同様にして`rep1()`も実装することができます。
 
 
 ```java 
