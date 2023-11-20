@@ -620,7 +620,7 @@ assert (new Result<List<String>>(List.of("a", "a", "a"), "")).equals(rep1(string
 
 #### 5.7.1.1 `string()`メソッド
 
-まず最初に`string()`メソッドで返す`JParser<String>`の中身を作ってみましょう。中身は以下のクラスのようになります。
+まず最初に`string(String literal)`メソッドで返す`JParser<String>`の中身を作ってみましょう。`JParser`クラスはただ一つのメソッド`parser()`をもつので次のような実装になります。
 
 ```java
 class JLiteralParser implements JParser<String> {
@@ -639,28 +639,37 @@ class JLiteralParser implements JParser<String> {
 }
 ```
 
-リテラルを表すフィールド`literal`が`input`の先頭とマッチした場合、`Result<String>`を返します。そうでない場合は返すべき`Result`がないので`null`を返します。簡単ですね。あとはこのクラスのインスタンスを返す`string()`メソッドを作成するだけです。
+このクラスは次のようにして使います。
 
 ```java
-JParser<String> string(String literal) {
-  return new JLiteralParser(literal);
+assert new Result<String>("foo", "").equals(new JLiteralParser("foo"));
+```
+
+リテラルを表すフィールド`literal`が`input`の先頭とマッチした場合、`literal`と残りの文字列からなる`Result<String>`を返します。そうでない場合は返すべき`Result`がないので`null`を返します。簡単ですね。あとはこのクラスのインスタンスを返す`string()`メソッドを作成するだけです。なお、使うときの利便性のため、以降では各種メソッドはクラス`JComb`のstaticメソッドとして実装していきます。
+
+```java
+public class JComb {
+  JParser<String> string(String literal) {
+    return new JLiteralParser(literal);
+  }
 }
 ```
 
 使う時は次のようになります。
 
 ```java
-JParser<String> foo = string("foo_bar");
-foo.parse("foo"); // Result<String>("foo", "_bar")
-foo.parse("baz"); // null
+JParser<String> foo = string("foo");
+assert new Result<String>("foo", "_bar").equals(foo.parse("foo_bar"));
+assert null == foo.parse("baz");
 ```
 
 #### 5.7.1.2 `alt()`メソッド
 
-次に二つのパーザを取って「選択」パーザを返すメソッド`alt()`を実装します。先程のようにクラスを実装してもいいですが、メソッドは一つだけなのでラムダ式にしてみます。
+次に二つのパーザを取って「選択」パーザを返すメソッド`alt()`を実装します。先程のようにクラスを実装してもいいですが、メソッドは一つだけなのでラムダ式にします。
 
 ```java
-// p1 / p2
+public class JComb {
+    // p1 / p2
     public static <A> JParser<A> alt(JParser<A> p1, JParser<A> p2) {
         return (input) -> {
             var result = p1.parse(input);//(1)
@@ -668,14 +677,17 @@ foo.parse("baz"); // null
             return p2.parse(input);//(3)
         };
     }
+}
 ```
 
-これは実質的には以下のような匿名クラスを書いたのと同じになります。
+ラムダ式について復習しておくと、これは実質的には以下のような匿名クラスを書いたのと同じになります。
 
 ```java
+public class JComb {
     public static <A> JParser<A> alt(JParser<A> p1, JParser<A> p2) {
         return new JAltParser<A>(p1, p2);
     }
+}
 
 class JAltParser<A> implements JParser<A> {
   private JParser<A> p1, p2;;
@@ -691,7 +703,15 @@ class JAltParser<A> implements JParser<A> {
 }
 ```
 
-PEGの`/`の定義を思い出して欲しいのですが、最初に試した式が失敗したときのみ次の式を試すのでした。ですから、(1)(2)(3)のシンプルな実装でうまく行くのです。
+この定義では、
+
+(1) まずパーザ`p1`を試しています
+(2) `p1`が成功した場合は`p2`を試すことなく値をそのまま返します
+(3) `p1`が失敗した場合、`p2`を試しその値を返します
+
+のような挙動をします。
+
+しかしこれはBNFというよりPEGの挙動です。そうです。実は今ここで作っているパーザコンビネータである`JComb`は（`SComb`）PEGをベースとしたパーザコンビネータだったのです。もちろん、PEGベースでないパーザコンビネータを作ることも出来るのですが実装がかなり複雑になってしまいます。PEGの挙動をそのままプログラミング言語に当てはめるのは非常に簡単であるため、今回はPEGを採用しましたが、もし興味があればBNFベース（文脈自由文法ベース）のパーザコンビネータも作ってみてください。
 
 #### 5.7.1.3 `seq()`メソッド
 
@@ -700,27 +720,29 @@ PEGの`/`の定義を思い出して欲しいのですが、最初に試した�
 ```java
 record Pair<A, B>(A a, B b){}
 // p1 p2
+public class JComb {
     public static <A, B> JParser<Pair<A, B>> seq(JParser<A> p1, JParser<B> p2) {
         return (input) -> {
-            var result1 = p1.parse(input);
-            if(result1 == null) return null;
-            var rest = result1.rest();
-            var result2 = p2.parse(rest);
-            if(result2 == null) return null;
-            return new Result<>(new Pair<A, B>(result1.value(), result2.value()), result2.rest());
+            var result1 = p1.parse(input); //(1-1)
+            if(result1 == null) return null; //(1-2)
+            var result2 = p2.parse(result1.rest()); //(2-1) 
+            if(result2 == null) return null; //(2-2)
+            return new Result<>(new Pair<A, B>(result1.value(), result2.value()), result2.rest());//(2-3)
         };
     }
+}
 ```
 
-先程の`alt()`メソッドと似通った実装ですが、p1が失敗したら全体が失敗する（nullを返す）のがポイントですね。p1とp2の両方が成功した場合は、二つの値のペアを返しています。二つの値のペアはレコード型を使ってシンプルに`record Pair<A, B>(...){}`として実装しました。
+先程の`alt()`メソッドと似通った実装ですが、p1が失敗したら全体が失敗する（nullを返す：(1-2)）のがポイントです。p1とp2の両方が成功した場合は、二つの値のペアを返しています（2-3）。
 
 #### 5.7.1.4 `rep0()`, `rep1()`メソッド
 
-PEGでパーザを組み立てるのに必要な基本要素はここまでで既に実装しましたが、シンタックスシュガーとしての繰り返し（`p*`, `p+`）も使い勝手の上で重要なので実装します。`p*`は`rep0()`メソッド、`p+`は`rep1()`メソッドとして実装します。
+残りは0回以上の繰り返し（`p*`）を表す`rep0()`と1回以上の繰り返し（`p+`）を表す`rep1()`メソッドです。
 
 まず、`rep0()`メソッドは次のようになります。
 
 ```java
+public class JComb {
     public static <A> JParser<List<A>> rep0(JParser<A> p) {
         return (input) -> {
             var result = p.parse(input); // (1)
@@ -735,29 +757,34 @@ PEGでパーザを組み立てるのに必要な基本要素はここまでで�
             return new Result<>(values, result2.rest());
         };
     }
+}
 ```
 
-パーザpを適用して（1）、失敗した場合空リストからなる結果を返し(2)、そうでなければ自身を再帰的に呼び出す(3)。シンプルな実装ですね。同様にして`rep1()`も実装することができます。
+(1)でまずパーザ`p`を適用しています。ここで失敗した場合、0回の繰り返しにマッチしたことになるので、空リストからなる結果を返します（(2)）。そうでなければ、1回以上の繰り返しにマッチしたことになるので、繰り返し同じ処理をする必要がありますが、これは再帰呼出しによって簡単に実装できます（(3)）。シンプルな実装ですね。
+
+
+`rep1(p)`は意味的には`seq(p, rep0(p))`なので、次のようにして実装を簡略化することができます。
 
 
 ```java 
+public class JComb {
     public static <A> JParser<List<A>> rep1(JParser<A> p) {
+        JParser<Pair<A, List<A>>> rep1Sugar = seq(p, rep0(p));
         return (input) -> {
-            var result = p.parse(input);
-            if(result == null) return null;
-            var value = result.value();
-            var rest = result.rest();
-            var result2 = rep0(p).parse(rest);
-            if(result2 == null) return new Result<>(List.of(value), rest);
-            List<A> values = new ArrayList<>();
-            values.add(value);
-            values.addAll(result2.value());
-            return new Result<>(values, result2.rest());
+            var result = rep1Sugar.parse(input);//(1)
+            if(result == null) return null;//(2)
+            var values = new ArrayList<>();
+            values.add(rep1Sugar.b());
+            values.addAll(rep1Sugar.b());
+            return new Result<>(values, result.rest()); //(3)
         };
     }
+}
 ```
 
-あとは、既に作られたパーザを加工して別の値を生成するためのメソッド`map()`を`JParser`に実装してみましょう。インタフェースの`default`メソッドが使えます。
+実質的な本体は(1)だけで、あとは結果の値が`Pair`なのを`List`に加工しているだけですね。
+
+既に作られたパーザを加工して別の値を生成するためのメソッド`map()`を`JParser`に実装してみましょう。`map()`は`JParser<R>`のメソッドとして実装するとメソッドチェインが使えて便利なので、インタフェースの`default`メソッドとして実装します。
 
 
 ```java
@@ -768,23 +795,28 @@ interface JParser<R> {
         return (input) -> {
             var result = this.parse(input);
             if (result == null) return null;
-            return new Result<>(f.apply(result.value()), result.rest());
+            return new Result<>(f.apply(result.value()), result.rest()); (1)
         };
     }
 }
 ```
 
-パーザを遅延評価するためのメソッド`lazy()`も導入します。後述するサンプルで必要になります。
+(1)で`f.apply(result.value())`として値を加工しているのがポイントでしょうか。
+
+パーザを遅延評価するためのメソッド`lazy()`も導入します。Javaはデフォルトでは遅延評価を採用しない言語なので、再帰的な規則を記述するときにこのようなメソッドがないと無限に再帰してスタックオーバーフローを起こしてしまいます。
 
 ```java
- public static <A> JParser<A> lazy(Supplier<JParser<A>> supplier) {
+public class JComb {
+    public static <A> JParser<A> lazy(Supplier<JParser<A>> supplier) {
         return (input) -> supplier.get().parse(input);
     }
+}
 ```
 
-ここまでで最低限の部品は出揃ったのですが、せっかくなので正規表現を扱えるようなメソッド`regex()`も導入してみましょう。
+これで最低限の部品は出揃ったのですが、せっかくなので正規表現を扱うメソッド`regex()`も導入してみましょう。
 
 ```java
+public class JComb {
     public static JParser<String> regex(String regex) {
         return (input) -> {
             var matcher = Pattern.compile(regex).matcher(input);
@@ -795,21 +827,27 @@ interface JParser<R> {
             }
         };
     }
+}
 ```
 
-引数として与えられた文字列を`Pattern.compile()`で正規表現に変換して、マッチングを行うだけです。これで後でパーザコンビネータで
-`regex("[0-9]+)`のような表現を使えるようになります。
+引数として与えられた文字列を`Pattern.compile()`で正規表現に変換して、マッチングを行うだけです。これは次のようにして使うことができます。
 
-さて、ここまでで作ったパーザコンビネータ`JComb`を使っていよいよ簡単な算術式のインタプリタを書いてみましょう。仕様は次の通りです。
+```java
+var number = regex("[0-9]+").map(v -> Integer.parseInt(v));
+assert (new Result<Integer>(10, "")).equals(number.parse("10"));
+```
+
+ここまでで作ったクラス`JComb`と`JParser`などを使っていよいよ簡単な算術式のインタプリタを書いてみましょう。仕様は次の通りです。
 
 - 扱える数値は整数のみ
 - 演算子は加減乗除（`+|-|*|/`）のみ
 - `()`によるグルーピングができる
 
-まず実装だけを提示すると次のようになります。
+実装だけを提示すると次のようになります。
 
 ```java
-   public JParser<Integer> expression() {
+public class Calculator {
+   public static JParser<Integer> expression() {
         /*
          * expression <- additive ( ("+" / "-") additive )*
          */
@@ -837,7 +875,7 @@ interface JParser<R> {
         });
     }
 
-    public JParser<Integer> additive() {
+    public static JParser<Integer> additive() {
         /*
          * additive <- primary ( ("*" / "/") primary )*
          */
@@ -865,7 +903,7 @@ interface JParser<R> {
         });
     }
 
-    public JParser<Integer> primary() {
+    public static JParser<Integer> primary() {
         /*
          * primary <- number / "(" expression ")"
          */
@@ -882,17 +920,20 @@ interface JParser<R> {
     }
     
     // number <- [0-9]+
-    JParser<Integer> number = regex("[0-9]+").map(Integer::parseInt);
+    private static JParser<Integer> number = regex("[0-9]+").map(Integer::parseInt);
+}
 ```
 
 コメントに対応するPEGを付加してありますが、表記は冗長なもののほぼPEGに一対一に対応しているのがわかるのではないでしょうか？
 
-これに対して、以下のようなテストコードを記述すると、無事、意図通りに解釈されていることがわかります。
+これに対してJUnitを使って以下のようなテストコードを記述してみます。無事、意図通りに解釈されていることがわかります。
 
 ```java
 assertEquals(new Result<>(7, ""), expression().parse("1+2*3")); // テストをパス
 ```
 
-TODO：解説を色々と
+結果として見ると、さすがにDSLに向いたScalaに比べれば大幅に冗長になったものの、手書きで再帰下降パーザを組み立てるのに比べると大幅に簡潔な記述を実現することができました。しかも、JComb全体を通しても500行にすら満たないのは特筆すべきところです。Javaがユーザ定義の中置演算子をサポートしていればもっと簡潔にできたのですが、そこは向き不向きといったところでしょうか。
 
-このように、パーザコンビネータを使うと、パーザジェネレータを作るには割に合わないケースでも気軽にパーザを組み立てるだめのDSL（Domain Specific Language）を定義できるのです。
+このように、パーザコンビネータを使うと、手書きでパーザを書いたり、あるいは、対象言語に構文解析器生成系がないようなケースでも、比較的気軽にパーザを組み立てるためのDSL（Domain Specific Language）を定義できるのです。また、それだけでなく、特にJavaのような静的型付き言語を使った場合ですが、IDEによる支援も受けられますし、BNFやPEGにはない便利な演算子を自分で導入することもできます。
+
+パーザコンビネータはお手軽なだけあって各種プログラミング言語に実装されています。たとえば、Java用なら[jparsec](https://github.com/jparsec/jparsec)があります。しかし、筆者としては、パーザコンビネータが動作する仕組みを理解するために、是非とも**自分だけの**パーザコンビネータを実装してみてほしいと思います。
