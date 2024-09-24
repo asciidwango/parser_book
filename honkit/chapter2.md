@@ -145,7 +145,7 @@ local_variable_declaration = type_name identifier ("=" expression)? ";"
 
 　BNFについて説明し終わったところで、早速、JSONのBNFを見ていくことにしましょう。JSONのBNFによる定義は以下で全てです。
 
-```bnf
+```text
 json = object;
 object = LBRACE RBRACE | LBRACE {pair {COMMA pair} RBRACE;
 pair = STRING COLON value;
@@ -232,7 +232,7 @@ object = LBRACE RBRACE | LBRACE pair {COMMA pair} RBRACE;
 
 　`pair`は、JSONのオブジェクト内での`"x":1`に当たる部分を表現する規則です。
 
-```bnf
+```text
 pair = STRING COLON value;
 ```
 
@@ -253,7 +253,7 @@ x:1 // 文字列リテラルでないといけない
 
 　`COMMA`は、カンマを表す規則です。カンマそのものを表すには、単に","と書けばいいのですが、それに対して、任意個の空白文字が続くことを表現したいため、`S`を参照しています。
 
-```bnf
+```text
 COMMA = "," S;
 ```
 

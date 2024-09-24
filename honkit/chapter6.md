@@ -54,7 +54,7 @@ x = 1; y = 2
 
 一方、PEGでは字句解析と構文解析が分離されていないため、特別な工夫をすることなく文字列補間を実装することができます。以下はRubyの文字列補間と同じようなものをPEGで記述する例です。
 
-```peg
+```text
 string <- "\"" ("#{" expression "}" / .)* "\""
 expression <- 式の定義
 ```
@@ -216,13 +216,13 @@ Scalaでも一行の文字数が増えれば分割したくなりますから、
 
 このような文法を実現するのは案外ややこしいものです。Javaの`System.out.println("A");`という文は正確には「式文」と呼ばれますが、この式文は次のように定義されます。
 
-```bnf
+```text
 expression_statement ::= expression <SEMICOLON>
 ```
 
 `<SEMICOLON>`はセミコロンを表すトークンです。では、Scala式の文法を「改行でもセミコロンでも終わることができる」と考えて次のように記述しても大丈夫でしょうか。
 
-```bnf
+```text
 expression_statement ::= expression <SEMICOLON>
                        | expression <LINE_TERMINATOR>
 ```
@@ -273,7 +273,7 @@ enum lex_state_e {
 
 例として拙作のプログラミング言語Klassicでは次のようにして式の合間に改行を挟むことができるようにしています。
 
-```klassic
+```scala
 //add ::= term {"+" term | "-" term}
 lazy val add: Parser[AST] = rule{
   chainl(term)(
@@ -285,7 +285,7 @@ lazy val add: Parser[AST] = rule{
 
 関数`CL()`は次のように定義されます。
 
-```klassic
+```scala
  def CL[T](parser: Parser[T]): Parser[T] = parser << SPACING
 ```
 
