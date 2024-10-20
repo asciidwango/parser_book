@@ -372,38 +372,6 @@ $$
 \end{align*}
 $$
 
-スタックは規則$P \rightarrow ( P ) P$にマッチしますから，還元が行われます。
-
-$$
-\begin{align*}
-スタック： & \lbrack \$, (, P \rbrack
-\end{align*}
-$$
-
-1文字シフトします。
-
-$$
-\begin{align*}
-スタック： & \lbrack \$, (, P, ) \rbrack
-\end{align*}
-$$
-
-規則$P \rightarrow \epsilon$を使って還元します。
-
-$$
-\begin{align*}
-スタック： & \lbrack \$, (, P, ), P\rbrack
-\end{align*}
-$$
-
-スタックは規則$P \rightarrow ( P ) P$にマッチしますから，還元が行われます。
-
-$$
-\begin{align*}
-スタック： & \lbrack \$, P\rbrack
-\end{align*}
-$$
-
 文字列の末尾にきたので、$\$$をシフトします。
 
 $$
