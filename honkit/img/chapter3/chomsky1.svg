@@ -1,0 +1,16 @@
+<svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg">
+    <!-- CSL (最外円) -->
+    <ellipse cx="200" cy="150" rx="180" ry="120" 
+             fill="#E3F2FD" stroke="#1565C0" stroke-width="2"/>
+    <text x="340" y="150" font-size="24" fill="#1565C0">CSL</text>
+    
+    <!-- CFL (中間の円) -->
+    <ellipse cx="200" cy="150" rx="130" ry="85" 
+             fill="#E8F5E9" stroke="#2E7D32" stroke-width="2"/>
+    <text x="290" y="120" font-size="24" fill="#2E7D32">CFL</text>
+    
+    <!-- RL (最内円) -->
+    <ellipse cx="200" cy="150" rx="80" ry="50" 
+             fill="#FFF3E0" stroke="#E65100" stroke-width="2"/>
+    <text x="190" y="155" font-size="24" fill="#E65100">RL</text>
+</svg>
