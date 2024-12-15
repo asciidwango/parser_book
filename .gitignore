@@ -9,3 +9,7 @@ build/
 
 y.tab.c
 lex.yy.c
+
+.metals/
+.vscode/
+.scala-build/
