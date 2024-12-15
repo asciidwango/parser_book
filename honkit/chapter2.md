@@ -121,31 +121,57 @@ false
 
 　次の節では、このJSONの**文法**が、どのような形で表現できるかについて見ていきます。
 
-## 2.2 JSONとBNF
+## 2.2 JSONとBNは
 
 　プログラミング言語の文法自体を表現する文法（メタ文法といいます）の一つに、BNFがあります。BNFは、プログラミング言語の文法をはじめ、インターネット上でのメッセージ交換フォーマットなど、様々な文法を表現するのに使われています。とはえ、本書の読者の方にはBNFに馴染みのない方もいると思うので、まず次の節で簡単にBNFについて説明した後、JSONを表現するBNFについて説明します。なお、本書ではISO/IEC 14977で仕様が策定されたEBNFの事を指してBNFと呼ぶことにします。BNFは歴史的に、かなり多くの方言があり、どの記法を使うか事前に説明しておかないと読みづらいためです。
 
 ### 2.2.1 BNF
 
-　BNFは、正式にはBackus-Naur Formと言います。Fortranの開発者でもある、John Backusらが開発した記法であるBNFは、「プログラミング言語」そのものの文法を記述するために開発されました。とはいっても、これだけではチンプンカンプンかもしれませんね。たとえば、Java言語のローカル変数宣言は、
+BNFは、正式にはBackus-Naur Form（バッカス・ナウア記法）と言います。Fortranの開発者でもある、John Backus（ジョン・バッカス）らが開発した記法であるBNFは、「プログラミング言語」そのものの文法を記述するために開発されました。基本情報技術者試験でも出題されるので、ひょっとしたらそこで知った方もおられるかもしれません。
 
+とはいっても、これだけではチンプンカンプンかもしれませんので具体例を見て行きましょう。
+
+たとえば、Java言語のローカル変数を宣言するプログラムの断片を考えてみると、以下のようになるでしょう。
+
+```java 
+// int型の変数x1を宣言して初期値を与えない
+int x1;
+// int型の変数x2を宣言して1を代入
+int x2 = 1;
+// String型の変数y1を宣言して初期値を与えない
+String y1;
+// String型の変数y2を宣言して"Hello, World"を代入
+String y2 = "Hello, World"; 
+// Double型の変数z1を宣言して初期値を与えない
+Double z1;
+// Double型の変数z2を宣言して1.0を代入
+Double z2 = 1.0;
 ```
+
+ローカル変数の宣言をよく見て行くと、以下のような形をしていることがわかります。
+
+```text
 型 変数名 ('=' 初期値)? ';'
 ```
 
-　という形をとります。これは、変数宣言の最初にはまず、型名が来て、その次に変数名、続いて省略可能な初期値が来ることを示しています。また、ローカル変数宣言はセミコロンで終わることも示しています。このように、プログラミング言語の文法には一定のルールがあり、それを曖昧さが無い形で解釈できると便利です。BNFは、そのような、曖昧さがない形でプログラミング言語やその他の機械が解釈可能な言語の文法を記述することを可能にします。たとえば、先程の例は、実際にBNFで書くと次のようになります。
+`(E)?`は`E`が省略可能であることを示しています。`'='`はその記号自体がでてくることを示しています。
 
-```
-local_variable_declaration = type_name identifier ("=" expression)? ";"
-```
+変数宣言の最初にはまず、型名が来て、その次に変数名、続いて省略可能な初期値が来ることを示しています。ローカル変数宣言はセミコロンで終わることも示しています。このように、プログラミング言語の文法には一定のルールがあり、それを曖昧さが無い形で解釈できると便利です。
 
-　このような、`=`で分かれた内の左側を規則名と呼び、右側を本体と呼びます。また、本体と非終端記号を合わせて規則と呼びます。本書では、BNFを多用していくので、慣れていくようにしてください。
+このようなニーズに答えるのが、BNFです。
+
+先ほどの文法をBNFで表現すると以下のようになります。
+
+```bnf
+local_variable_declaration = type_name identifier ('=' expression)? ';'
+
+このような、`=`で分かれた内の左側を規則名と呼び、右側を本体と呼びます。また、本体と非終端記号を合わせて規則と呼びます。本書では、BNFを多用していくので、慣れていくようにしてください。
 
 ### 2.2.2 JSONのBNF
 
-　BNFについて説明し終わったところで、早速、JSONのBNFを見ていくことにしましょう。JSONのBNFによる定義は以下で全てです。
+BNFについて説明し終わったところで、早速、JSONのBNFを見ていくことにしましょう。JSONのBNFによる定義は以下で全てです。
 
-```text
+```bnf
 json = object;
 object = LBRACE RBRACE | LBRACE {pair {COMMA pair} RBRACE;
 pair = STRING COLON value;
@@ -181,38 +207,42 @@ E = "e+" | "e-" | "E+" | "E-" | "e" | "E" ;
 
 ### json
 
-　まず、一番上から読んでいきます。先程も書きましたが、BNFでは、
+まず、一番上から読んでいきます。先程も書きましたが、BNFでは、
 
  ```
 json = object;
  ```
  
- 　のような、**規則**の集まりによって、文法を表現します。`=`の左側である`json`が**規則名**で、右側（ここでは `object`）が**本体**とになります。さらに、先程は説明していませんでしたが、本体の中に出てくる、他の規則を参照する部分（ここでは`object`)を非終端記号と呼びます。非終端記号は同じBNFで定義されている規則名と一致する必要があります。
+のような、**規則**の集まりによって、文法を表現します。`=`の左側である`json`が**規則名**で、右側（ここでは `object`）が**本体**とになります。さらに、先程は説明していませんでしたが、本体の中に出てくる、他の規則を参照する部分（ここでは`object`)を非終端記号と呼びます。非終端記号は同じBNFで定義されている規則名と一致する必要があります。
   
-  この規則を日本語で表現すると、「`json`という名前の規則は、`object`という非終端記号を参照している」と読むことができます。また、`object`は、JSONのオブジェクトを表しているので、jsonという規則は全体で一つのオブジェクトを表しているということになります。
+この規則を日本語で表現すると、「`json`という名前の規則は、`object`という非終端記号を参照している」と読むことができます。また、`object`は、JSONのオブジェクトを表しているので、jsonという規則は全体で一つのオブジェクトを表しているということになります。
 
 ### object
 
-　`object` はJSONのオブジェクトを表す規則です。
+`object` はJSONのオブジェクトを表す規則で、定義は以下のようになっています。
 
 ```
 object = LBRACE RBRACE | LBRACE pair {COMMA pair} RBRACE;
 ```
 
-　これは、`object`は
+EBNFにおいて`{}`で囲まれたものは、その中の要素が0回以上繰り返して出現することを示しています。また、`pair`の定義はのちほど出てきますので心配しないでください。
+
+この規則によって`object`は
 
 - ブレースで囲まれたもの（`LBRACE RBRACE`)である
-- 開きブレース（`LBRACE`）が来た後に、`pair`が1回出現して、さらにその後に、`COMMA`を区切り文字として `pair` が1回以上繰り返して出現した後、閉じブレースが来る（`RBRACE`)
+  - `LBRACE`はLeft-Brace（開き波カッコ）の略で`{`を示しています
+  - `RBACE`はRight-Brace（閉じ波カッコ）の略で`}`を示しています
+- `LBRACE`が来た後に、`pair`が1回出現して、さらにその後に、`COMMA`（カンマ）を区切り文字として `pair` が1回以上繰り返して出現した後、`RBRACE`が来る
 
-　のどちらかであることを表しています。
+のどちらかであることを表しています。
 
-　具体的なJSONを当てはめてみましょう。以下のJSONは、`LBRACE RBRACE`にマッチします。
+具体的なJSONを当てはめてみましょう。以下のJSONは、`LBRACE RBRACE`にマッチします。
 
 ```js
 {}
 ```
 
-　また、以下のJSONは、`LBRACE {air {COMMA pair} RBRACE`にマッチします。
+以下のJSONは`LBRACE {pair {COMMA pair} RBRACE`にマッチします。
 
 ```js
 {"x":1}
@@ -220,30 +250,28 @@ object = LBRACE RBRACE | LBRACE pair {COMMA pair} RBRACE;
 {"x":1,"y":2,"z":3}
 ```
 
-　しかし、以下のテキストは、`object`に当てはまらず、エラーになります。これは、規則の中を見ると、カンマ（`COMMA`）は区切り文字であるためです。
+しかし、以下のテキストは、`object`に当てはまらず、エラーになります。これは、規則の中を見ると、カンマ（`COMMA`）は区切り文字であるためです。
 
 ```js
 {"x":1,} // ,で終わっている
 ```
 
-　`pair`や`COMMA`の具体的な定義については、次以降の項で説明します。
-
 ### pair
 
-　`pair`は、JSONのオブジェクト内での`"x":1`に当たる部分を表現する規則です。
+`pair`（ペア）は、JSONのオブジェクト内での`"x":1`に当たる部分を表現する規則です。`value`の定義については後述します。
 
-```text
+```bnf
 pair = STRING COLON value;
 ```
 
-　これは、`:`の前に文字列リテラル（`STRING`)が来て、その後にJSONの値（`value`）が来ることを表しています。`pair`にマッチするテキストとしては、
+これによってペアは`:`（`COLON`）の前に文字列リテラル（`STRING`)が来て、その後にJSONの値（`value`）が来ることを表しています。`pair`にマッチするテキストとしては、
 
 ```
 "x":1
 "y":true
 ```
 
-　などがあります。一方で、以下のテキストは`pair`にマッチしません。この点はJavaScriptのオブジェクトとJSONが違う点です。
+などがあります。一方で、以下のテキストは`pair`にマッチしません。JavaScriptのオブジェクトとJSONが違う点です。
 
 ```
 x:1 // 文字列リテラルでないといけない
@@ -251,34 +279,36 @@ x:1 // 文字列リテラルでないといけない
 
 ### COMMA
 
-　`COMMA`は、カンマを表す規則です。カンマそのものを表すには、単に","と書けばいいのですが、それに対して、任意個の空白文字が続くことを表現したいため、`S`を参照しています。
+`COMMA`は、カンマを表す規則です。カンマそのものを表すには、単に`","`と書けばいいのですが、任意個の空白文字が続くことを表現したいため、規則`S`（後述）を参照しています。
 
-```text
+```bnf
 COMMA = "," S;
 ```
 
 ### array
 
-　`array`は、JSONの値の配列を表す規則です。
+`array`は、JSONの値の配列を表す規則です。
 
 ```bnf
 array = LBRACKET RBRACKET | LBRACKET value {COMMA value} RBRACKET ;
 ```
 
-　これは、`array`は、
+`LBRACKET`は開き大カッコ（`[`）を、`RBRACKET`は閉じ大カッコ（`]`)を表しています。
+
+これによって`array`は、
 
 - 大カッコで囲まれたもの（`LBRACKET RBRACET`)である
-- 開き大カッコ（`LBRACKET`）が来た後に、`value`が1回出現して、さらにその後に、`COMMA`を区切り文字として `value` が1回以上繰り返して出現した後、閉じ大カッコが来る（`RBRACKET`)
+- 開き大カッコ（`LBRACKET`）が来た後に、`value`が1回あらわれて、さらにその後に、`COMMA`を区切り文字として `value` が1回以上繰り返してあらわれた後、閉じ大カッコが来る（`RBRACKET`)
 
-　のどちらかであることを表しています。よく見ると、これは先程の`object`と同様の構造を持っていることがわかります。
+のどちらかであることを表しています。よく見ると、先程の`object`と同様の構造を持っていることがわかります。
 
-　具体的なJSONを当てはめてみましょう。以下のJSONは、`LBRACKET RBRACKET`にマッチします。
+`array`についても具体的なJSONを当てはめてみましょう。以下のJSONは`LBRACKET RBRACKET`にマッチします。
 
 ```js
 []
 ```
 
-　また、以下のJSONは、`LBRACKET value {COMMA value} RBRACKET`にマッチします。
+また、以下のJSONは`LBRACKET value {COMMA value} RBRACKET`にマッチします。
 
 ```js
 [1]
@@ -287,13 +317,13 @@ array = LBRACKET RBRACKET | LBRACKET value {COMMA value} RBRACKET ;
 ["foo"]
 ```
 
-　しかし、以下のテキストは、`array`に当てはまらず、エラーになります。これは、カンマ（`COMMA`）は区切り文字であるためです。
+しかし、以下のテキストは、`array`に当てはまらず、エラーになります。`{COMMA pair}`とあるように、カンマは必ず後ろにペアを必要とするからです。
 
 ```js
 [1,] // ,で終わっている
 ```
 
-　`value`の定義については、次の項で説明します。
+`value`の定義については次の項で説明します。
 
 ### value
 
@@ -377,16 +407,16 @@ NULL = "null" S;
 
 ## 2.3 JSONの構文解析器
 
-　さて、ここまでで、JSONの定義と、その文法について見てきました。この節では、BNFを元に、JSONを**構文解析**するプログラムを考えてみます。まだ、構文解析が何かも定義していないわけですが、とりあえずは、以下のようなインタフェース`JsonParser`インタフェースを実装したクラスを「JSONの構文解析器」と考えることにします。
+ここまでで、JSONの定義と、その文法について見てきました。この節では、BNFを元に、JSONを**構文解析**するプログラムを考えてみます。まだ、構文解析が何かも定義していないわけですが、とりあえずは、以下のようなインタフェース`JsonParser`インタフェースを実装したクラスを「JSONの構文解析器」と考えることにします。
 
 ```java
 package parser;
 interface JsonParser {
-        public ParseResult<Ast.JsonValue> parse(String input);
+        public ParseResult<JsonAst.JsonValue> parse(String input);
 }
 ```
 
-　なお、クラス`ParseResult<T>`は以下のようなジェネリックなクラスになっています。`value`は解析結果の値です。これは任意の型をとり得るので、`T`としています。また、`input`は「残りの文字列」を表します。
+　なお、クラス`ParseResult<T>`は以下のようなジェネリックなクラスになっています。`value`は解析結果の値です。これは任意の型をとり得るので、`T`としています。また、`input`は「構文解析の対象となる文字列」を表します。
 
 ```java
 public class ParseResult<T> {
@@ -399,15 +429,15 @@ public class ParseResult<T> {
 }
 ```
 
-　このインタフェース`JsonParser`は`parse()`メソッドだけを持ちます。`parse()`メソッドは、文字列`input`を受け取り、`ParseResult<Ast.JsonValue>`型を返します。`JsonValue`は以下のように定義されます。GoF(Gang of Four)パターンで言うところの`Composite`パターンですが、Javaのようなオブジェクト指向言語で、再帰的な木構造を表す時には定番のパターンです。
+　このインタフェース`JsonParser`は`parse()`メソッドだけを持ちます。`parse()`メソッドは、文字列`input`を受け取り、`ParseResult<JsonAst.JsonValue>`型を返します。`JsonValue`は以下のように定義されます。GoF(Gang of Four)パターンで言うところの`Composite`パターンですが、Javaのようなオブジェクト指向言語で、再帰的な木構造を表す時には定番のパターンです。
 
 ```java
-public class Ast {
+public interface JsonAst {
     // value
-    public interface JsonValue {}
+    interface JsonValue {}
     
     // NULL
-    public static class JsonNull implements JsonValue {
+    class JsonNull implements JsonValue {
         private JsonNull(){}
         private static final JsonNull INSTANCE = new JsonNull();
         public static JsonNull getInstance() {
@@ -422,7 +452,7 @@ public class Ast {
     
     
     // TRUE
-    public static class JsonTrue implements JsonValue {
+    class JsonTrue implements JsonValue {
         private JsonTrue(){}
         private static final JsonTrue INSTANCE = new JsonTrue();
         public static JsonTrue getInstance() {
@@ -436,7 +466,7 @@ public class Ast {
     }
     
     // FALSE
-    public static class JsonFalse implements JsonValue {
+    class JsonFalse implements JsonValue {
         private JsonFalse(){}
         private static final JsonFalse INSTANCE = new JsonFalse();
         public static JsonFalse getInstance() {
@@ -450,7 +480,7 @@ public class Ast {
     }
     
     // NUMBER
-    public static class JsonNumber implements JsonValue {
+    class JsonNumber implements JsonValue {
         public final double value;
         public JsonNumber(double value) {
             this.value = value;
@@ -458,15 +488,12 @@ public class Ast {
         
         @Override
         public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            JsonNumber that = (JsonNumber) o;
-            return Double.compare(that.value, value) == 0;
+            // 実装は省略
         }
         
         @Override
         public int hashCode() {
-            return Objects.hash(value);
+            // 実装は省略
         }
     
         @Override
@@ -478,7 +505,7 @@ public class Ast {
     }
     
     // STRING
-    public static class JsonString implements JsonValue {
+    class JsonString implements JsonValue {
         public final String value;
         public JsonString(String value) {
             this.value = value;
@@ -486,15 +513,12 @@ public class Ast {
         
         @Override
         public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            JsonString that = (JsonString) o;
-            return Objects.equals(value, that.value);
+            // 実装は省略
         }
         
         @Override
         public int hashCode() {
-            return Objects.hash(value);
+            // 実装は省略
         }
     
         @Override
@@ -506,7 +530,7 @@ public class Ast {
     }
     
     // object
-    public static class JsonObject implements JsonValue {
+    class JsonObject implements JsonValue {
         public final List<Pair<JsonString, JsonValue>> properties;
         public JsonObject(List<Pair<JsonString, JsonValue>> properties) {
             this.properties = properties;
@@ -514,15 +538,12 @@ public class Ast {
         
         @Override
         public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            JsonObject object = (JsonObject) o;
-            return Objects.equals(properties, object.properties);
+            // 実装は省略
         }
         
         @Override
         public int hashCode() {
-            return Objects.hash(properties);
+            // 実装は省略
         }
     
         @Override
@@ -534,7 +555,7 @@ public class Ast {
     }
     
     // array
-    public static class JsonArray implements JsonValue {
+    class JsonArray implements JsonValue {
         public final List<JsonValue> elements;
         public JsonArray(List<JsonValue> elements) {
             this.elements = elements;
@@ -542,15 +563,12 @@ public class Ast {
         
         @Override
         public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            JsonArray jsonArray = (JsonArray) o;
-            return Objects.equals(elements, jsonArray.elements);
+            // 実装は省略
         }
         
         @Override
         public int hashCode() {
-            return Objects.hash(elements);
+            // 実装は省略
         }
    
         @Override
@@ -563,11 +581,11 @@ public class Ast {
 }
 ```
 
-　各クラスが、JSONのBNFの規則名に対応しているのがわかるでしょうか。この節では、各規則に対応するメソッドを実装することを通して、実際にJSONの構文解析器を組み上げていきます。
+各クラスが、JSONのBNFの規則名に対応しているのがわかるでしょうか。この節では、各規則に対応するメソッドを実装することを通して、実際にJSONの構文解析器を組み上げていきます。
 
 ### 構文解析器の全体像
 
-　これから、JSONの構文解析器、つまり、JSONを表す文字列を受け取って、それに対応する上記の`Ast.JsonValue`型の値を返すメソッドを実装していくわけですが、まず、構文解析器を表現するクラスの全体像を示しておきます。このクラスは次のようになります。
+これから、JSONの構文解析器、つまり、JSONを表す文字列を受け取って、それに対応する上記の`JsonAst.JsonValue`型の値を返すメソッドを実装していくわけですが、まず、構文解析器を表現するクラスの全体像を示しておきます。このクラスは次のようになります。
 
 ```java
 package parser;
@@ -588,7 +606,7 @@ public class PegJsonParser implements JsonParser {
         }
     }
 
-    public ParseResult<Ast.JsonValue> parse(String input) {
+    public ParseResult<JsonAst.JsonValue> parse(String input) {
         this.input = input;
         this.cursor = 0;
         try {
@@ -632,7 +650,7 @@ public class PegJsonParser implements JsonParser {
         }
     }
 
-    private Ast.JsonValue parseValue() {
+    private JsonAst.JsonValue parseValue() {
         int backup = cursor;
         try {
             return parseString();
@@ -673,22 +691,22 @@ public class PegJsonParser implements JsonParser {
         return parseNull();
     }
 
-    private Ast.JsonTrue parseTrue() {
+    private JsonAst.JsonTrue parseTrue() {
         recognize("true");
         skipWhitespace();
-        return Ast.JsonTrue.getInstance();
+        return JsonAst.JsonTrue.getInstance();
     }
 
-    private Ast.JsonFalse parseFalse() {
+    private JsonAst.JsonFalse parseFalse() {
         recognize("false");
         skipWhitespace();
-        return Ast.JsonFalse.getInstance();
+        return JsonAst.JsonFalse.getInstance();
     }
 
-    private Ast.JsonNull parseNull() {
+    private JsonAst.JsonNull parseNull() {
         recognize("null");
         skipWhitespace();
-        return Ast.JsonNull.getInstance();
+        return JsonAst.JsonNull.getInstance();
     }
 
     private void parseLBrace() {
@@ -722,7 +740,7 @@ public class PegJsonParser implements JsonParser {
     }
 
 
-    private Ast.JsonString parseString() {
+    private JsonAst.JsonString parseString() {
         if(cursor >= input.length()) {
             throwParseException("expected: \"" + " actual: EOF");
         }
@@ -799,7 +817,7 @@ public class PegJsonParser implements JsonParser {
             throwParseException("expected: " + "\"" + " actual: " + ch);
         } else {
             skipWhitespace();
-            return new Ast.JsonString(builder.toString());
+            return new JsonAst.JsonString(builder.toString());
         }
         throw new RuntimeException("never reach here");
     }
@@ -813,7 +831,7 @@ public class PegJsonParser implements JsonParser {
         throw exception;
     }
 
-    private Ast.JsonNumber parseNumber() {
+    private JsonAst.JsonNumber parseNumber() {
         int start = cursor;
         char ch = 0;
         while(cursor < input.length()) {
@@ -824,28 +842,28 @@ public class PegJsonParser implements JsonParser {
         if(start == cursor) {
             throwParseException("expected: [0-9] actual: " + (ch != 0 ? ch : "EOF"));
         }
-        return new Ast.JsonNumber(Integer.parseInt(input.substring(start, cursor)));
+        return new JsonAst.JsonNumber(Integer.parseInt(input.substring(start, cursor)));
     }
 
-    private Pair<Ast.JsonString, Ast.JsonValue> parsePair() {
+    private Pair<JsonAst.JsonString, JsonAst.JsonValue> parsePair() {
         var key = parseString();
         parseColon();
         var value = parseValue();
         return new Pair<>(key, value);
     }
 
-    private Ast.JsonObject parseObject() {
+    private JsonAst.JsonObject parseObject() {
         int backup = cursor;
         try {
             parseLBrace();
             parseRBrace();
-            return new Ast.JsonObject(new ArrayList<>());
+            return new JsonAst.JsonObject(new ArrayList<>());
         } catch (ParseException e) {
             cursor = backup;
         }
 
         parseLBrace();
-        List<Pair<Ast.JsonString, Ast.JsonValue>> members = new ArrayList<>();
+        List<Pair<JsonAst.JsonString, JsonAst.JsonValue>> members = new ArrayList<>();
         var member = parsePair();
         members.add(member);
         try {
@@ -856,22 +874,22 @@ public class PegJsonParser implements JsonParser {
             }
         } catch (ParseException e) {
             parseRBrace();
-            return new Ast.JsonObject(members);
+            return new JsonAst.JsonObject(members);
         }
     }
 
-    public Ast.JsonArray parseArray() {
+    public JsonAst.JsonArray parseArray() {
         int backup = cursor;
         try {
             parseLBracket();
             parseRBracket();
-            return new Ast.JsonArray(new ArrayList<>());
+            return new JsonAst.JsonArray(new ArrayList<>());
         } catch (ParseException e) {
             cursor = backup;
         }
 
         parseLBracket();
-        List<Ast.JsonValue> values = new ArrayList<>();
+        List<JsonAst.JsonValue> values = new ArrayList<>();
         var value = parseValue();
         values.add(value);
         try {
@@ -882,7 +900,7 @@ public class PegJsonParser implements JsonParser {
             }
         } catch (ParseException e) {
             parseRBracket();
-            return new Ast.JsonArray(values);
+            return new JsonAst.JsonArray(values);
         }
     }
 }
@@ -902,15 +920,15 @@ public class PegJsonParser implements JsonParser {
 `null`の構文解析は、次のような　`parseNull()` メソッドとして定義します。
 
 ```java
-private Ast.JsonNull parseNull() {
+private JsonAst.JsonNull parseNull() {
     recognize("null");
     skipWhitespace();
-    return Ast.JsonNull.getInstance();
+    return JsonAst.JsonNull.getInstance();
 }
 
 ```
 
-　このメソッドで行っていることを見ていきましょう。このメソッドでは、入力である`input`の現在位置が`"null"`という文字列で始まっているかをチェックします。もしそうなら、**JSONのnull**をあらわす`Ast.JsonNull`のインスタンスを返します。もし、先頭が`"null"`でなければ、構文解析は失敗なので例外を発生させますが、これは`recognize()`メソッドの中で行われています。`recognize()`の内部では、入力の現在位置と与えられた文字列を照合して、マッチしない場合例外を投げます。
+　このメソッドで行っていることを見ていきましょう。このメソッドでは、入力である`input`の現在位置が`"null"`という文字列で始まっているかをチェックします。もしそうなら、**JSONのnull**をあらわす`JsonAst.JsonNull`のインスタンスを返します。もし、先頭が`"null"`でなければ、構文解析は失敗なので例外を発生させますが、これは`recognize()`メソッドの中で行われています。`recognize()`の内部では、入力の現在位置と与えられた文字列を照合して、マッチしない場合例外を投げます。
 
 　次に、`skipWhitespace()`メソッドを呼び出して、「空白の読み飛ばし」を行っています。
 
@@ -921,10 +939,10 @@ private Ast.JsonNull parseNull() {
 `true`の構文解析は、次のような　`parseTrue()` メソッドとして定義します。
 
 ```java
-private Ast.JsonTrue parseTrue() {
+private JsonAst.JsonTrue parseTrue() {
     recognize("true");
     skipWhitespace();
-    return Ast.JsonTrue.getInstance();
+    return JsonAst.JsonTrue.getInstance();
 }
 ```
 
@@ -935,10 +953,10 @@ private Ast.JsonTrue parseTrue() {
 `false`の構文解析は、次のシグニチャを持つ　`parseFalse()` メソッドとして定義します。
 
 ```java
-private Ast.JsonFalse parseFalse() {
+private JsonAst.JsonFalse parseFalse() {
     recognize("false");
     skipWhitespace();
-    return Ast.JsonFalse.getInstance();
+    return JsonAst.JsonFalse.getInstance();
 }
 ```
 
@@ -949,7 +967,7 @@ private Ast.JsonFalse parseFalse() {
 数値の構文解析は、次のシグニチャを持つ　`parseNumber()` メソッドとして定義します。
 
 ```java
-    private Ast.JsonNumber parseNumber() {
+    private JsonAst.JsonNumber parseNumber() {
         int start = cursor;
         char ch = 0;
         while(cursor < input.length()) {
@@ -960,8 +978,7 @@ private Ast.JsonFalse parseFalse() {
         if(start == cursor) {
             throwParseException("expected: [0-9] actual: " + (ch != 0 ? ch : "EOF"));
         }
-        return new Ast.JsonNumber(Integer.parseInt(input.substring(start, cursor)));
-    }
+        return new JsonAst.JsonNumber(Integer.parseInt(input.substring(start, cursor))); }
 ```
 
 `parseNumber()` では、`while`文において、
@@ -969,14 +986,14 @@ private Ast.JsonFalse parseFalse() {
 - 0から9までの文字が出る間、入力を読む
 - 1桁ずつ、数値に変換する
 
-という処理を行っています。本来なら、JSONの仕様では、少数も扱えるのですが、構文解析にとっては本質的ではないので本書では省略します。
+という処理を行っています。本来なら、JSONの仕様では、小数も扱えるのですが、構文解析にとっては本質的ではないので本書では省略します。
 
 ### 文字列の構文解析メソッド
 
 文字列の構文解析は、次のシグニチャを持つ　`parseString()` メソッドとして定義します。
 
 ```java
-    private Ast.JsonString parseString() {
+    private JsonAst.JsonString parseString() {
         if(cursor >= input.length()) {
             throwParseException("expected: \"" + " actual: EOF");
         }
@@ -1053,7 +1070,7 @@ private Ast.JsonFalse parseFalse() {
             throwParseException("expected: " + "\"" + " actual: " + ch);
         } else {
             skipWhitespace();
-            return new Ast.JsonString(builder.toString());
+            return new JsonAst.JsonString(builder.toString());
         }
         throw new RuntimeException("never reach here");
     }
@@ -1099,7 +1116,7 @@ private Ast.JsonFalse parseFalse() {
             throwParseException("expected: " + "\"" + " actual: " + ch);
         } else {
             skipWhitespace();
-            return new Ast.JsonString(builder.toString());
+            return new JsonAst.JsonString(builder.toString());
         }
         throw new RuntimeException("never reach here");
 ```
@@ -1113,18 +1130,18 @@ private Ast.JsonFalse parseFalse() {
 配列の構文解析は、次のシグニチャを持つ　`parseArray()` メソッドとして定義します。
 
 ```java
-    public Ast.JsonArray parseArray() {
+    public JsonAst.JsonArray parseArray() {
         int backup = cursor;
         try {
             parseLBracket();
             parseRBracket();
-            return new Ast.JsonArray(new ArrayList<>());
+            return new JsonAst.JsonArray(new ArrayList<>());
         } catch (ParseException e) {
             cursor = backup;
         }
 
         parseLBracket();
-        List<Ast.JsonValue> values = new ArrayList<>();
+        List<JsonAst.JsonValue> values = new ArrayList<>();
         var value = parseValue();
         values.add(value);
         try {
@@ -1135,7 +1152,7 @@ private Ast.JsonFalse parseFalse() {
             }
         } catch (ParseException e) {
             parseRBracket();
-            return new Ast.JsonArray(values);
+            return new JsonAst.JsonArray(values);
         }
     }
 ```
@@ -1178,7 +1195,7 @@ parseLBracket();
         try {
             parseLBracket();
             parseRBracket();
-            return new Ast.JsonArray(new ArrayList<>());
+            return new JsonAst.JsonArray(new ArrayList<>());
         } catch (ParseException e) {
             cursor = backup;
         }
@@ -1190,7 +1207,7 @@ parseLBracket();
 
 ```java
         parseLBracket();
-        List<Ast.JsonValue> values = new ArrayList<>();
+        List<JsonAst.JsonValue> values = new ArrayList<>();
         var value = parseValue();
         values.add(value);
 ```
@@ -1209,7 +1226,7 @@ values.add(value);
 
 ```java
 parseRBracket();
-return new Ast.JsonArray(values);
+return new JsonAst.JsonArray(values);
 ```
 
 　とします。もし、テキストが正しいJSONでない場合、`parseRBracket()`から例外が投げられるはずですが、その例外は**より上位の層が適切にリカバーしてくれると期待して**放置します。JSONのような再帰的な構造を解析する時、このような、「自分の呼び出し元が適切にやってくれるはず」（何故なら、自分はその呼び出し元で適切にcatchしているのだから）という考え方が重要になります。
@@ -1228,18 +1245,18 @@ array = LBRACKET RBRACKET | LBRACKET {value {COMMA value}} RBRACKET ;
 オブジェクトの構文解析は、次のシグニチャを持つ　`parseObject()` メソッドとして定義します。
 
 ```java
-    private Ast.JsonObject parseObject() {
+    private JsonAst.JsonObject parseObject() {
         int backup = cursor;
         try {
             parseLBrace();
             parseRBrace();
-            return new Ast.JsonObject(new ArrayList<>());
+            return new JsonAst.JsonObject(new ArrayList<>());
         } catch (ParseException e) {
             cursor = backup;
         }
 
         parseLBrace();
-        List<Pair<Ast.JsonString, Ast.JsonValue>> members = new ArrayList<>();
+        List<Pair<JsonAst.JsonString, JsonAst.JsonValue>> members = new ArrayList<>();
         var member = parsePair();
         members.add(member);
         try {
@@ -1250,7 +1267,7 @@ array = LBRACKET RBRACKET | LBRACKET {value {COMMA value}} RBRACKET ;
             }
         } catch (ParseException e) {
             parseRBrace();
-            return new Ast.JsonObject(members);
+            return new JsonAst.JsonObject(members);
         }
     }
 ```
@@ -1266,7 +1283,7 @@ array = LBRACKET RBRACKET | LBRACKET {value {COMMA value}} RBRACKET ;
 ```java
 parseLBrace();
 parseRBrace();
-return new Ast.JsonObject(new ArrayList<>());
+return new JsonAst.JsonObject(new ArrayList<>());
 ```
 
 としている箇所は、`{}`という形の空オブジェクトを読み取ろうとしていますが、これは、空配列`[]`を読み取るコードとほぼ同じです。
@@ -1276,7 +1293,7 @@ return new Ast.JsonObject(new ArrayList<>());
 そして、`parsePair()`は以下のように定義されています。
 
 ```java
-    private Pair<Ast.JsonString, Ast.JsonValue> parsePair() {
+    private Pair<JsonAst.JsonString, JsonAst.JsonValue> parsePair() {
         var key = parseString();
         parseColon();
         var value = parseValue();
@@ -1305,7 +1322,9 @@ pair = STRING COLON value;
 
 ここまででJSONの構文解析器を実装することが出来ましたが、実は、この節で紹介した技法は古典的な構文解析の技法では**ありません**。
 
-この節で解説した技法は、Parsing Expression Grammar(PEG)と呼ばれる手法に基づいています。PEGは2004にBryan Fordによって提案された形式文法であり、従来主流であったCFG(Context-Free Grammar)と少し違う特徴を持ちますが、プログラミング言語など曖昧性の無い言語の解析に使うのには便利であり、最近では色々な言語でPEGをベースにした構文解析器が実装されています。構文解析を理解するのに字句解析は本来的には余計なものとも言えるので、先にPEGを使った技法を学ぶことで、構文解析についてスムーズに理解してもらえたのではないかと思います。ただし、従来の構文解析手法（という言い方は不適切で、依然として従来の手法の方がよく使われています）を学ぶのも重要な事ですので、次の節では、字句解析という手法を用いた構文解析手法について解説します。
+この節で解説した技法は、Parsing Expression Grammar(PEG)と呼ばれる手法に基づいています。
+
+PEGは2004にBryan Ford（ブライアン・フォード）によって提案された形式文法であり、従来主流であったCFG(Context-Free Grammar)と少し違う特徴を持ちますが、プログラミング言語など曖昧性の無い言語の解析に使うのには便利であり、最近では色々な言語でPEGをベースにした構文解析器が実装されています。構文解析を理解するのに字句解析は本来的には余計なものとも言えるので、先にPEGを使った技法を学ぶことで、構文解析についてスムーズに理解してもらえたのではないかと思います。ただし、従来の構文解析手法（という言い方は不適切で、依然として従来の手法の方がよく使われています）を学ぶのも重要な事ですので、次の節では、字句解析という手法を用いた構文解析手法について解説します。
 
 ## 2.4 字句解析器を使った構文解析器
 
@@ -1547,14 +1566,14 @@ import java.util.List;
 public class SimpleJsonParser implements JsonParser {
     private SimpleJsonTokenizer tokenizer;
 
-    public ParseResult<Ast.JsonValue> parse(String input) {
+    public ParseResult<JsonAst.JsonValue> parse(String input) {
         tokenizer = new SimpleJsonTokenizer(input);
         tokenizer.moveNext();
         var value = parseValue();
         return new ParseResult<>(value, tokenizer.rest());
     }
 
-    private Ast.JsonValue parseValue() {
+    private JsonAst.JsonValue parseValue() {
         var token = tokenizer.current();
         switch(token.type) {
             case INTEGER:
@@ -1575,37 +1594,37 @@ public class SimpleJsonParser implements JsonParser {
         throw new RuntimeException("cannot reach here");
     }
 
-    private Ast.JsonTrue parseTrue() {
+    private JsonAst.JsonTrue parseTrue() {
         if(!tokenizer.current().equals(true)) {
-            return Ast.JsonTrue.getInstance();
+            return JsonAst.JsonTrue.getInstance();
         }
         throw new parser.ParseException("expected: true, actual: " + tokenizer.current().value);
     }
 
-    private Ast.JsonFalse parseFalse() {
+    private JsonAst.JsonFalse parseFalse() {
         if(!tokenizer.current().equals(false)) {
-            return Ast.JsonFalse.getInstance();
+            return JsonAst.JsonFalse.getInstance();
         }
         throw new parser.ParseException("expected: false, actual: " + tokenizer.current().value);
     }
 
-    private Ast.JsonNull parseNull() {
+    private JsonAst.JsonNull parseNull() {
         if(tokenizer.current().value == null) {
-            return Ast.JsonNull.getInstance();
+            return JsonAst.JsonNull.getInstance();
         }
         throw new parser.ParseException("expected: null, actual: " + tokenizer.current().value);
     }
 
-    private Ast.JsonString parseString() {
-        return new Ast.JsonString((String)tokenizer.current().value);
+    private JsonAst.JsonString parseString() {
+        return new JsonAst.JsonString((String)tokenizer.current().value);
     }
 
-    private Ast.JsonNumber parseNumber() {
+    private JsonAst.JsonNumber parseNumber() {
         var value = (Integer)tokenizer.current().value;
-        return new Ast.JsonNumber(value);
+        return new JsonAst.JsonNumber(value);
     }
 
-    private Pair<Ast.JsonString, Ast.JsonValue> parsePair() {
+    private Pair<JsonAst.JsonString, JsonAst.JsonValue> parsePair() {
         var key = parseString();
         tokenizer.moveNext();
         if(tokenizer.current().type != Token.Type.COLON) {
@@ -1616,23 +1635,23 @@ public class SimpleJsonParser implements JsonParser {
         return new Pair<>(key, value);
     }
 
-    private Ast.JsonObject parseObject() {
+    private JsonAst.JsonObject parseObject() {
         if(tokenizer.current().type != Token.Type.LBRACE) {
             throw new parser.ParseException("expected `{`, actual: " + tokenizer.current().value);
         }
 
         tokenizer.moveNext();
         if(tokenizer.current().type == Token.Type.RBRACE) {
-            return new Ast.JsonObject(new ArrayList<>());
+            return new JsonAst.JsonObject(new ArrayList<>());
         }
 
-        List<Pair<Ast.JsonString, Ast.JsonValue>> members = new ArrayList<>();
+        List<Pair<JsonAst.JsonString, JsonAst.JsonValue>> members = new ArrayList<>();
         var pair= parsePair();
         members.add(pair);
 
         while(tokenizer.moveNext()) {
             if(tokenizer.current().type == Token.Type.RBRACE) {
-                return new Ast.JsonObject(members);
+                return new JsonAst.JsonObject(members);
             }
             if(tokenizer.current().type != Token.Type.COMMA) {
                 throw new parser.ParseException("expected: `,`, actual: " + tokenizer.current().value);
@@ -1645,23 +1664,23 @@ public class SimpleJsonParser implements JsonParser {
         throw new parser.ParseException("unexpected EOF");
     }
 
-    private Ast.JsonArray parseArray() {
+    private JsonAst.JsonArray parseArray() {
         if(tokenizer.current().type != Token.Type.LBRACKET) {
             throw new parser.ParseException("expected: `[`, actual: " + tokenizer.current().value);
         }
 
         tokenizer.moveNext();
         if(tokenizer.current().type == Token.Type.RBRACKET) {
-            return new Ast.JsonArray(new ArrayList<>());
+            return new JsonAst.JsonArray(new ArrayList<>());
         }
 
-        List<Ast.JsonValue> values = new ArrayList<>();
+        List<JsonAst.JsonValue> values = new ArrayList<>();
         var value = parseValue();
         values.add(value);
 
         while(tokenizer.moveNext()) {
             if(tokenizer.current().type == Token.Type.RBRACKET) {
-                return new Ast.JsonArray(values);
+                return new JsonAst.JsonArray(values);
             }
             if(tokenizer.current().type != Token.Type.COMMA) {
                 throw new parser.ParseException("expected: `,`, actual: " + tokenizer.current().value);
@@ -1754,24 +1773,24 @@ public class SimpleJsonTokenizer implements JsonTokenizer {
 `parseTrue()`メソッドは、規則`TRUE`に対応するメソッドで、JSONの`true`に対応するものを解析するメソッドでもあります。実装は以下のようになります：
 
 ```java
-    private Ast.JsonTrue parseTrue() {
+    private JsonAst.JsonTrue parseTrue() {
         if(!tokenizer.current().equals(true)) {
-            return Ast.JsonTrue.getInstance();
+            return JsonAst.JsonTrue.getInstance();
         }
         throw new parser.ParseException("expected: true, actual: " + tokenizer.current().value);
     }
 ```
 
-見るとわかりますが、`tokenizer`が保持している次のトークンの値が`true`だったら、`Ast.JsonTrue`のインスタンスを返しているだけですね。ほぼ、字句解析器に処理を丸投げしているだけですから、詳しい説明は不要でしょう。
+見るとわかりますが、`tokenizer`が保持している次のトークンの値が`true`だったら、`JsonAst.JsonTrue`のインスタンスを返しているだけですね。ほぼ、字句解析器に処理を丸投げしているだけですから、詳しい説明は不要でしょう。
 
 #### 2.4.3.2 parseFalse
 
 `parseTrue()`メソッドは、規則`FALSE`に対応するメソッドで、JSONの`false`に対応するものを解析するメソッドでもあります。実装は以下のようになります：
 
 ```java
-    private Ast.JsonFalse parseFalse() {
+    private JsonAst.JsonFalse parseFalse() {
         if(!tokenizer.current().equals(false)) {
-            return Ast.JsonFalse.getInstance();
+            return JsonAst.JsonFalse.getInstance();
         }
         throw new parser.ParseException("expected: false, actual: " + tokenizer.current().value);
     }
@@ -1784,9 +1803,9 @@ public class SimpleJsonTokenizer implements JsonTokenizer {
 `parseNull()`メソッドは、規則`NULL`に対応するメソッドで、JSONの`null`に対応するものを解析するメソッドでもあります。実装は以下のようになります：
 
 ```java
-  private Ast.JsonNull parseNull() {
+  private JsonAst.JsonNull parseNull() {
         if(tokenizer.current().value == null) {
-            return Ast.JsonNull.getInstance();
+            return JsonAst.JsonNull.getInstance();
         }
         throw new parser.ParseException("expected: null, actual: " + tokenizer.current().value);
     }
@@ -1799,8 +1818,8 @@ public class SimpleJsonTokenizer implements JsonTokenizer {
 `parseString()`メソッドは、規則`STRING`に対応するメソッドで、JSONの`"..."`に対応するものを解析するメソッドでもあります。実装は以下のようになります：
 
 ```java
-   private Ast.JsonString parseString() {
-        return new Ast.JsonString((String)tokenizer.current().value);
+   private JsonAst.JsonString parseString() {
+        return new JsonAst.JsonString((String)tokenizer.current().value);
    }
 ```
 
@@ -1811,9 +1830,9 @@ public class SimpleJsonTokenizer implements JsonTokenizer {
 `parseString()`メソッドは、規則`NUMBER`に対応するメソッドで、JSONの`1, 2, 3, 4, ...`に対応するものを解析するメソッドでもあります。実装は以下のようになります：
 
 ```java
-    private Ast.JsonNumber parseNumber() {
+    private JsonAst.JsonNumber parseNumber() {
         var value = (Integer)tokenizer.current().value;
-        return new Ast.JsonNumber(value);
+        return new JsonAst.JsonNumber(value);
     }
 ```
 
@@ -1824,23 +1843,23 @@ public class SimpleJsonTokenizer implements JsonTokenizer {
 `parseObject()`メソッドは、規則`object`に対応するメソッドで、JSONのオブジェクトリテラルに対応するものを解析するメソッドでもあります。実装は以下のようになります：
 
 ```java
-    private Ast.JsonObject parseObject() {
+    private JsonAst.JsonObject parseObject() {
         if(tokenizer.current().type != Token.Type.LBRACE) {
             throw new parser.ParseException("expected `{`, actual: " + tokenizer.current().value);
         }
 
         tokenizer.moveNext();
         if(tokenizer.current().type == Token.Type.RBRACE) {
-            return new Ast.JsonObject(new ArrayList<>());
+            return new JsonAst.JsonObject(new ArrayList<>());
         }
 
-        List<Pair<Ast.JsonString, Ast.JsonValue>> members = new ArrayList<>();
+        List<Pair<JsonAst.JsonString, JsonAst.JsonValue>> members = new ArrayList<>();
         var pair= parsePair();
         members.add(pair);
 
         while(tokenizer.moveNext()) {
             if(tokenizer.current().type == Token.Type.RBRACE) {
-                return new Ast.JsonObject(members);
+                return new JsonAst.JsonObject(members);
             }
             if(tokenizer.current().type != Token.Type.COMMA) {
                 throw new parser.ParseException("expected: `,`, actual: " + tokenizer.current().value);
@@ -1858,7 +1877,7 @@ public class SimpleJsonTokenizer implements JsonTokenizer {
 
 - その次のトークンが`}`であった場合：空オブジェクトを返す
 - それ以外の場合： `parsePair()` を呼び出し、 `string:pair` のようなペアを解析した後、以下のループに突入：
-  - 次のトークンが`}`の場合、集めたペアのリストを引数として、`Ast.JsonObject()`オブジェクトを作って返す
+  - 次のトークンが`}`の場合、集めたペアのリストを引数として、`JsonAst.JsonObject()`オブジェクトを作って返す
   - それ以外で、次のトークンが`,`でない場合、構文エラーを投げて終了
   - それ以外の場合：次のトークンをフェッチして来て、`parsePair()`を呼び出して、ペアを解析した後、リストにペアを追加
 
@@ -1869,23 +1888,23 @@ public class SimpleJsonTokenizer implements JsonTokenizer {
 `parseArray()`メソッドは、規則`array`に対応するメソッドで、JSONの配列リテラルに対応するものを解析するメソッドでもあります。実装は以下のようになります：
 
 ```java
-    private Ast.JsonArray parseArray() {
+    private JsonAst.JsonArray parseArray() {
         if(tokenizer.current().type != Token.Type.LBRACKET) {
             throw new parser.ParseException("expected: `[`, actual: " + tokenizer.current().value);
         }
 
         tokenizer.moveNext();
         if(tokenizer.current().type == Token.Type.RBRACKET) {
-            return new Ast.JsonArray(new ArrayList<>());
+            return new JsonAst.JsonArray(new ArrayList<>());
         }
 
-        List<Ast.JsonValue> values = new ArrayList<>();
+        List<JsonAst.JsonValue> values = new ArrayList<>();
         var value = parseValue();
         values.add(value);
 
         while(tokenizer.moveNext()) {
             if(tokenizer.current().type == Token.Type.RBRACKET) {
-                return new Ast.JsonArray(values);
+                return new JsonAst.JsonArray(values);
             }
             if(tokenizer.current().type != Token.Type.COMMA) {
                 throw new parser.ParseException("expected: `,`, actual: " + tokenizer.current().value);
@@ -1903,7 +1922,7 @@ public class SimpleJsonTokenizer implements JsonTokenizer {
 
 - その次のトークンが`]`であった場合：空オブジェクトを返す
 - それ以外の場合： `parseValue()` を呼び出し、 `value`を解析した後、以下のループに突入：
-  - 次のトークンが`}`の場合、集めた`values`のリストを引数として、`Ast.JsonObject()`オブジェクトを作って返す
+  - 次のトークンが`}`の場合、集めた`values`のリストを引数として、`JsonAst.JsonObject()`オブジェクトを作って返す
   - それ以外で、次のトークンが`,`でない場合、構文エラーを投げて終了
   - それ以外の場合：次のトークンをフェッチして来て、`parsePair()`を呼び出して、`value`を解析した後、リストに`value`を追加
 
