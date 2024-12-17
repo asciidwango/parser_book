@@ -1,454 +1,949 @@
-# 6. 現実の構文解析
+# 6. 構文解析器生成系の世界
 
-ここまでで、LL法やLR法、Packrat Parsingといった、これまでに知られているメジャーな構文解析アルゴリズムを一通り取り上げてきました。これらの構文解析アルゴリズムは概ね文脈自由言語あるいはそのサブセットを取り扱うことができ、一般的なプログラミング言語の構文解析を行うのに必要十分な能力を持っているように思えます。
+　4章では現在知られている構文解析手法について、アイデアと提案手法の概要について説明しました。実は、構文解析の世界ではよく知られていることなのですが、4章で説明した各種構文解析手法は毎回プログラマが手で実装する必要はありません。
 
-しかし、構文解析を専門としている人や実用的な構文解析器を書いている人は直感的に理解していることなのですが、実のところ、既存の構文解析アルゴリズムだけではうまく取り扱えない類の構文があります。一言でいうと、それらの構文は文脈自由言語から逸脱しているために、文脈自由言語を取り扱う既存の手法だけではうまくいかないのです。
+　というのは、CFGやPEG（その類似表記も含む）によって記述された文法定義から特定の構文解析アルゴリズムを用いた構文解析器を生成する構文解析器生成系というソフトウェアがあるからです。もちろん、それぞれの構文解析アルゴリズムや生成する構文解析器の言語ごとに別のソフトウェアを書く必要がありますが、ひとたびある構文解析アルゴリズムのための構文解析器生成系を誰かが書けば、その構文解析アルゴリズムを知らないプログラマでもその恩恵にあずかることができるのです。
 
-このような、既存の構文解析アルゴリズムだけでは扱えない要素は多数あります。たとえば、Cのtypedefはその典型ですし、RubyやPerlのヒアドキュメントと呼ばれる構文もそうです。他には、Scalaのプレースホルダ構文やC++のテンプレート、Pythonのインデント文法など、文脈自由言語を逸脱しているがゆえに人間が特別に配慮しなければいけない構文は多く見かけられます。
+　構文解析器生成系でもっとも代表的なものはyaccあるいはその互換実装であるGNU bisonでしょう。yaccはLALR(1)法を利用したCの構文解析器を生成してくれるソフトウェアであり、yaccを使えばプログラマはLALR(1)法の恩恵にあずかることができます。
 
-また、これまでの章では、主に構文解析を行う手法を取り扱っていましたが、現実問題としては抽象構文木をうまく作る方法やエラーメッセージを適切に出す方法も重要になってきます。
+　この章では構文解析器生成系という種類のソフトウェアの背後にあるアイデアからはじまり、LL(1)、LALR(1）、PEGのための構文解析器を作る方法や多種多様な構文解析器生成系についての紹介などを行います。
 
-この章では、巷の書籍ではあまり扱われない、しかし現実の構文解析では対処しなくてはならない構文や問題について取り上げます。皆さんが何かしらの構文解析器を作るとき、やはり理想どおりにはいかないことが多いと思います。この章がそのような現実の構文解析で遭遇する読者の方々の助けになれば幸いです。
+　また、この章の最後ではある意味構文解析生成系の一種とも言えるパーザコンビネータの実装方法について踏み込んで説明します。構文解析生成系はいったん対象となるプログラミング言語のソースコードを生成します。この時、対象言語のコードを部分的に埋め込む必要性が出てくるのですが、この「対象言語のコードを埋め込める必要がある」というのは結構曲者でして、実用上ほぼ必須だけど面倒くささと伴うので、構文解析系をお手軽に作るとは行かない部分があります。
 
-## 6.1 字句要素が構文要素を含む文法
+　一方、パーザコンビネータであれば、いわゆる「ラムダ式」を持つほとんどのプログラミング言語で比較的簡単に実装できます。本書で利用しているJava言語でも同様です。というわけで、本章を読めば皆さんもパーザコンビネータを明日から自前で実装できるようになります。
 
-最近の多くの言語は文字列補間(String Interpolation)と呼ばれる機能を持っています。
+## 6.1 Dyck言語の文法とPEGによる構文解析器生成
 
-たとえば、Rubyでは以下の文字列を評価すると、`"x + y = x + y"`ではなく`"x + y = 3"`になります。
+これまで何度も登場したDyck言語は明らかにLL(1)法でもLR(1)法でもPEGによっても解析可能な言語です。実際、4章ではDyck言語を解析する手書きのPEGパーザを書いたのでした。しかし、立ち戻ってよくよく考えてみると退屈な繰り返しコードが散見されたのに気づいた方も多いのではないでしょうか（4章に盛り込む予定）。
 
-```ruby
-x = 1; y = 2
-"x + y = #{x + y}" # "x + y = 3"
-```
+実際のところ、Dyck言語を表現する文法があって、構文解析アルゴリズムがPEGということまで分かれば対応するJavaコードを**機械的に生成する**ことも可能そうに見えます。特に、構文解析はコード量が多いわりには退屈な繰り返しコードが多いものですから、文法からJavaコードを生成できれば劇的に工数を削減できそうです。
 
-つまり、`#{`と`}`で囲まれた範囲をRubyの式として評価した結果を文字列として埋め込んでくれるわけです。
+このように「文法と構文解析手法が決まれば、後のコードは自動的に決定可能なはずだから、機械に任せてしまおう」という考え方が構文解析器生成系というソフトウェアの背後にあるアイデアです。
 
-Scalaでも同じことを次のように書くことができます。
-
-```scala
-val x = 1; val y = 2
-s"x + y = #{x + y}" // "x + y = 3"
-```
-
-Swiftだと次のようになります。
-
-```swift
-let x = 1
-let y = 2
-"x + y = \(x + y)"
-```
-
-
-同様の機能はKotlin、Python(3.6以降)、JavaScript（TypeScriptも）など様々な言語に採用されています。比較的新しい言語や、既存言語の新機能として採用するのがすっかり普通になった機能と言えるでしょう。
-
-文字列補間はとても便利な機能ですが、構文解析という観点からは少々やっかいな存在です。文字列リテラルは従来はトークンとして扱われており、正規言語の範囲に収まるように設計されていたため、正規表現で取り扱えたのです。これは字句解析と構文解析を分離し、かつ、字句解析を可能な限り単純化するという観点で言えばある意味当然とも言えますが、文字列補間は従来は字句であり正規表現で表現できたものを文脈自由文法を取り扱わなければいけない存在にしてしまいました。
-
-たとえば、少々極端な例ですが、Rubyでは以下のように`#{}`の中にさらに文字列リテラルを書くことができ、その中には`#{}`を……といった具合に無限にネストできるのです。これまでの章を振り返ればわかるようにこれは明らかに正規言語を逸脱しており文脈自由言語の扱う範疇です。
-
-```ruby
-x = 1; y = 2
-"expr1 (#{"expr2 (#{x + y})"})" # "expr1 (expr2 (3))"
-```
-
-しかし、従来の手法では文字列リテラルは字句として取り扱わなければいけないため、各言語処理系の実装者はad hocな形で構文解析器に手を加えています。たとえば、Rubyの構文解析器はbisonを使って書かれていますが、字句解析器に状態を持たせることでこの問題に対処しています。文字列リテラル内に`#{"が出現したら状態を式モードに切り替えて、その中で文字列リテラルがあらわれたら文字列リテラルモードに切り替えるといった具合です。
-
-一方、PEGでは字句解析と構文解析が分離されていないため、特別な工夫をすることなく文字列補間を実装することができます。以下はRubyの文字列補間と同じようなものをPEGで記述する例です。
+早速ですが、以下のようにDyck言語を表す文法が与えられたとして、PEGを使った構文解析器を生成する方法を考えてみましょう。
 
 ```text
-string <- "\"" ("#{" expression "}" / .)* "\""
-expression <- 式の定義
+D <- P;
+P <- "(" P ")" | "()";
 ```
 
-文字列補間を含む文字列リテラルは分解可能という意味で厳密な意味では字句と言えないわけですが、PEGは字句解析を分離しないおかげで文字列リテラルを殊更特別扱いする必要がないわけです。
-
-PEGの利用例が近年増えてきているのは、言語に対してこのようにアドホックに構文を追加したいというニーズがあるためではないかと筆者は考えています。
-
-## 6.2 インデント文法
-
-Pythonではインデントによってプログラムの構造を表現します。たとえば、次のPythonプログラムを考えます。
-
-```python
-class Point:
-  def __init__(self, x, y):
-    self.x = x
-    self.y = y
-```
-
-このPythonプログラムは次のような抽象構文木に変換されると考えられます。
-
-```
-class
-|-- name: Point
-|-- def
-    | -- name: init
-    | -- arguments
-         | -- self
-         | -- x
-         | -- y
-    | -- body
-         | -- self.x = x
-         | -- self.y = y
-```
-
-インデントによってプログラムの構造を表現するというアイデアは秀逸だと思いますが、一方で、インデントによる構造の表現は明らかに文脈自由言語の範囲を超えるものです。
-
-Pythonでは字句解析のときにインデントを`<IDENT>`、インデントを「外す」のを`<DEDENT>`というトークンに変換することで構文解析のときに複雑さを持ち込まないようにしています。つまり、`<IDENT>`と`<DEDENT>`というトークンによって挟まれた範囲がクラス定義の本体であったり、メソッド定義の本体であったりという形にして取り扱っているのです。これは括弧の対応をとる問題と同じため、字句解析後のPythonは文脈自由言語の範囲内で取り扱えます。
-
-上の文だと字句解析後は次のようになります。
-
-```
-<CLASS> <NAME:Point> <IDENT> <DEF> <NAME:__init__> <LPAREN> <NAME:self> <NAME:x> <NAME:y> <IDENT> .... <DEDENT> <DEDENT>
-```
-
-`<NAME:A>`は`A`という名前のことを表すトークン、`<LPAREN>`は開き括弧を表すトークン、`<DEF>`はdefキーワードを表すトークンであるものとします。
-
-しかし、よくよく考えればわかるのですが、`<IDENT>`トークンと`<DEDENT>`トークンを切り出す処理が文脈自由ではありません。つまり、字句解析時に`<IDENT>`と`<DEDENT>`トークンを切り出すために特殊な処理をしていることになります。`<DEDENT>`トークンは`<IDENT>`トークンとスペースの数が同じでなければいけないため、切り出すためには正規表現でも文脈自由文法でも手に余ることは想像できるでしょう。
-
-## 6.3 ヒアドキュメント
-
-ヒアドキュメントは複数行に渡る文字列を記述するための文法で、従来はbashなどのシェル言語で採用されていましたが、PerlやRubyもヒアドキュメントを採用しました。たとえば、RubyでHTMLの文字列をヒアドキュメントで以下のように書くことができます。
-
-```ruby
-html = <<HTML
-<html>
-  <head><title>Title</title></head>
-  <body><p>Hello</p></body>
-</html>
-HTML
-```
-
-特筆すべきは、`<<HTML`と`HTML`のように対応している間だけが文字列として解釈されることです。これだけなら文脈自由言語の範囲内です。実際には問題はもっと複雑です。ヒアドキュメントは**ネストが可能**なのです。たとえば、以下のようなヒアドキュメントは正しいRubyプログラムです。
-
-```ruby
-here = <<E1 + <<E2
-ここはE1です
-E1
-ここはE2です
-E2
-```
-
-これは以下の内容の文字列として解釈されます。
-
-```ruby
-ここはE1です
-ここはE2です
-```
-
-ヒアドキュメント内では文字列補間が使えるのでさらに複雑です。以下のようなヒアドキュメントもOKなのです。
-
-```ruby
-a = 100
-b = 200
-here = <<A + <<B
-aは#{a}です
-A
-bは#{b}です
-B
-```
-
-これは次の文字列として解釈されます。
-
-```
-aは100です
-bは200です
-```
-
-読者の方々はおそらく「確かに凄いけど、普通はこのような書き方をすることはほぼないのでは」と思われたのではないでしょうか。実際問題そうなのですば、Rubyはこのような複雑怪奇なプログラムもうまく構文解析できなければいけないのも事実です。
-
-Rubyのヒアドキュメントを適切に構文解析するには直感的にはHTMLやXMLにおけるタグ名の対応付けと同じ処理が必要になりますが、これは明らかに文脈自由言語の範囲を超えています。Rubyのヒアドキュメントがこのような振る舞いをすることを初めて知ったのは筆者が大学院生の頃ですが、あまりに予想外の振る舞いに目眩がする思いだったのを覚えています。
-
-Rubyのヒアドキュメントが実際にどのように実装されているかはさておき、筆者は中田育男先生と共同でISO Rubyの試験的な構文解析器を実装したときに、ヒアドキュメントをどう実装すべきかという難題に取り組む羽目になりました。
-
-詳細については、中田先生の[ruby_scalaリポジトリ](https://github.com/inakata/ruby_scala/blob/3f54cc6f80678e30a211fb1374280246f08182ed/src/main/scala/com/github/inakata/ruby_scala/Ruby.scala#L1383)を読んでもらえばわかりますがとても難解な処理になっています。
-
-このときはScalaのパーザコンビネータを使ってヒアドキュメントを再現したのですが、引数を取ってコンビネータを返すメソッドを定義することで問題を解決しました。形式言語の文脈でいうのなら、PEGの規則が引数を持てるように拡張することでヒアドキュメントを解釈できるようになったと言うことができます。
-
-PEGを拡張して規則が引数を持てるようにするという試みは複数ありますが、筆者もMacro PEGというPEGを拡張したものを提案しました。ヒアドキュメントという当たり前に使われている言語機能ですら、構文解析を正しく行うためには厄介な処理をする必要があるのです。
-
-## 6.4 改行終端可能文法
-
-C、C++、Java、C#などの言語では、解釈・実行の基本単位は**文**(Statement)と呼ばれるものになります。また、文はセミコロンなどの終端子と呼ばれるもので終わるか、区切り文字で区切られるのが一般的です。一方、セミコロンが文の区切りになるのがPascalなどの言語です。厳密には違いますが、関数型プログラミング言語Standard MLのセミコロンも似たような扱いです。
-
-Javaでは次のように書くことで、A、B、Cを順に出力することができます。
+PEGでは非終端記号の呼び出しは関数呼び出しとみなすことができますから、まず次のようなコードになります。
 
 ```java
-System.out.println("A");
-System.out.println("B");
-System.out.println("C");
-```
-
-このように文が終端子（Terminator)で終わる文法には、文の途中に改行が挟まっても単なるスペースと同様に取り扱えるという利点があります。先程のプログラムを次のように書き換えても意味は代わりません。
-
-```java
-System.out.println(
-  "A");
-System.out.println(
-  "B");
-System.out.println(
-  "C");
-```
-
-大抵の場合、文は一行で終わるのですから、毎回セミコロンをつけなければいけないのも面倒くさいものです。そういったニーズを反映してか、Scala、Kotlin、Swift、Goなどの比較的新しい言語では（Scalaの初期バージョン
-が2003ですから、そこまで新しいのかという話もありますが）、文はセミコロンで終わることもできるが、改行でも終わることができます。より古い言語でもPython、Ruby、JavaScriptも改行で文が終わることができます。
-
-たとえば、先程のJavaプログラムに相当するScalaプログラムは次のようになります。
-
-```scala
-println("A")
-println("B")
-println("C")
-```
-
-見た目にもすっきりしますし、改行を併用するコーディングスタイルが大半であることを考えても、無駄なタイピングが減るしでいいことずくめです。Scalaではそれでいて、次のように文の途中で改行が入っても問題なく解釈・実行することができます。
-
-```scala
-println(
-  "A")
-println(
-  "B")
-println(
-  "C")
-```
-
-Scalaでも一行の文字数が増えれば分割したくなりますから、このような機能があるのは自然でしょう。
-
-ここで一つの疑問が湧きます。「文は改行で終わる」という規則なら改行が来たときに「文の終わり」とみなせばよいですし、「文はセミコロンで終わる」という規則なら、セミコロンが来たときに「文の終わり」とみなせば問題ありません。しかしながら、このような文法を実現するためには「セミコロンが来れば文が終わるが、改行で文が終わることもある」というややこしい規則に基づいて構文解析をしなければいけません。
-
-このような文法を実現するのは案外ややこしいものです。Javaの`System.out.println("A");`という文は正確には「式文」と呼ばれますが、この式文は次のように定義されます。
-
-```text
-expression_statement ::= expression <SEMICOLON>
-```
-
-`<SEMICOLON>`はセミコロンを表すトークンです。では、Scala式の文法を「改行でもセミコロンでも終わることができる」と考えて次のように記述しても大丈夫でしょうか。
-
-```text
-expression_statement ::= expression <SEMICOLON>
-                       | expression <LINE_TERMINATOR>
-```
-
-
-`<LINE_TERMINATOR>`は改行を表すトークンです。プラットフォームによって改行コードは異なるので、このように定義しておくと楽でしょう。このような規則でうまく先程の例全てをうまく取り扱えるかといえば、端的に言って無理です。
-
-```scala
-println(
-  "A")
-```
-
-C系の言語では行コメントなどの例外を除き、字句解析時に改行もスペースも同じ扱いで処理しているので、このような「式の途中で改行が来る」ケースも特に工夫する必要がありませんでした。しかし、Scalaなどの言語における「改行」は式の途中では無視されるが文末では終端子にもなり得るという複雑な存在です。
-
-言い換えると「文脈」を考慮して改行を取り扱う必要がでてきたのです。このような文法はどのようにすれば取り扱えるでしょうか。なかなか難しい問題ですが、大きく分けて二つの戦略があります。
-
-一つ目は字句解析器に文脈情報を持たせる方法です。たとえば、「式」モードでは改行は無視されるが、「文」モードだと無視されないという風にした上で、式が終わったら「文」モードに切り替えを行い、式が開始したら「式」モードに切り替えを行います。この方式を採用している典型的な言語がRubyで、Cで書かれた字句解析器には実に多数の文脈情報を持たせています。
-
-```c
-// https://github.com/ruby/ruby/blob/v3_2_0/parse.y#L161-L181
-/* examine combinations */
-enum lex_state_e {
-#define DEF_EXPR(n) EXPR_##n = (1 << EXPR_##n##_bit)
-    DEF_EXPR(BEG),
-    DEF_EXPR(END),
-    DEF_EXPR(ENDARG),
-    DEF_EXPR(ENDFN),
-    DEF_EXPR(ARG),
-    DEF_EXPR(CMDARG),
-    DEF_EXPR(MID),
-    DEF_EXPR(FNAME),
-    DEF_EXPR(DOT),
-    DEF_EXPR(CLASS),
-    DEF_EXPR(LABEL),
-    DEF_EXPR(LABELED),
-    DEF_EXPR(FITEM),
-    EXPR_VALUE = EXPR_BEG,
-    EXPR_BEG_ANY  =  (EXPR_BEG | EXPR_MID | EXPR_CLASS),
-    EXPR_ARG_ANY  =  (EXPR_ARG | EXPR_CMDARG),
-    EXPR_END_ANY  =  (EXPR_END | EXPR_ENDARG | EXPR_ENDFN),
-    EXPR_NONE = 0
-};
-```
-
-「改行で文が終わる」以外にもRubyはかなり複雑な構文解析を行っているため、このように多数の状態を字句解析器に持たせる必要があります。Rubyの文法は私が知る限り**もっとも複雑なものの一つ**なのでややこれは極端ですが、字句解析器に状態を持たせるアプローチは他の言語も採用していることが多いようです。
-
-別のアプローチとして既出のPEGを使うという方法があります。PEGでは字句解析という概念自体がありませんから、式の途中に改行が入るというのも構文解析レベルで処理できます。Python 3.10以降、PEGを用いた構文解析器が採用されていると書きましたが、このアプローチが採用されているかは確認できています。
-
-例として拙作のプログラミング言語Klassicでは次のようにして式の合間に改行を挟むことができるようにしています。
-
-```scala
-//add ::= term {"+" term | "-" term}
-lazy val add: Parser[AST] = rule{
-  chainl(term)(
-    (%% << CL(PLUS)) ^^ { location => (left: AST, right: AST) => BinaryExpression(location, Operator.ADD, left, right) } |
-    (%% << CL(MINUS)) ^^ { location => (left: AST, right: AST) => BinaryExpression(location, Operator.SUBTRACT, left, right) }
-  )
+public boolean parseD() {
+    return parseP();
+}
+public boolean parseP() {
+    "(" P ")" | "()"
 }
 ```
 
-関数`CL()`は次のように定義されます。
+## 6.2 JSONの構文解析器を生成する
 
-```scala
- def CL[T](parser: Parser[T]): Parser[T] = parser << SPACING
+LL(1)構文解析器生成系で、JSONのパーザが作れることを示す。これを通じて、構文解析器生成系が実用的に使えることを理解してもらう。
+
+## 6.3 構文解析器生成系の分類
+
+構文解析器生成系は1970年代頃から研究の蓄積があり、数多くの構文解析生成系がこれまで開発されています。基本的には構文解析器生成系と採用しているアルゴリズムは対応するので、たとえば、JavaCCはLL(1)構文解析器を出力するため、LL(1)構文解析器生成系であると言ったりします。
+
+同様に、yacc(bison)はLALR(1)構文解析器生成系を出力するので、LALR(1)構文解析器生成系であると言ったりもします。ただし、例外もあります。bisonはyaccと違って、LALR(1)より広いGLR構文解析器を生成できるので、GLR構文解析器生成系であるとも言えるのです。実際には、yaccを使う場合、ほとんどはLALR(1)構文解析器を出力するので、GLRについては言及されることは少ないですが、そのようなことは知っておいても損はないでしょう。
+
+より大きなくくりでみると、下向き構文解析（LL法やPEG）と上向き構文解析（LR法など）という観点から分類することもできますし、ともに文脈自由文法ベースであるLL法やLR法と、解析表現文法など他の形式言語を用いた構文解析法を対比してみせることもできます。
+
+## 6.4 JavaCC：Javaの構文解析生成系の定番
+
+1996年、Sun Microsystems（当時）は、Jackという構文解析器生成系をリリースしました。その後、Jackの作者が自らの会社を立ち上げ、JackはJavaCCに改名されて広く知られることとなりましたが、現在では紆余曲折の末、[javacc.github.io](https://javacc.github.io/javacc)の元で開発およびメンテナンスが行われています。現在のライセンスは3条項BSDライセンスです。
+
+JavaCCはLL(1)法を元に作られており、構文定義ファイルからLL(1)パーザを生成します。以下は四則演算を含む数式を計算できる電卓をJavaCCで書いた場合の例です。
+
+```java
+options {
+  STATIC = false;
+  JDK_VERSION = "17";
+}
+
+PARSER_BEGIN(Calculator)
+package com.github.kmizu.calculator;
+public class Calculator {
+  public static void main(String[] args) throws ParseException {
+    Calculator parser = new Calculator(System.in);
+    parser.start();
+  }
+}
+PARSER_END(Calculator)
+
+SKIP : { " " | "\t"  | "\r" | "\n" }
+TOKEN : {
+  <ADD: "+">
+| <SUBTRACT: "-">
+| <MULTIPLY: "*">
+| <DIVIDE: "/">
+| <LPAREN: "(">
+| <RPAREN: ")">
+| <INTEGER: (["0"-"9"])+>
+}
+o
+public int expression() :
+{int r = 0;}
+{
+  r=add() <EOF> { return r; }
+}
+
+public int add() :
+{int r = 0; int v = 0;}
+{
+    r=mult() ( <ADD> v=mult() { r += v; }| <SUBTRACT> v=mult() { r -= v; })* {
+        return r;
+    }
+}
+
+
+public int mult() :
+{int r = 0; int v = 0;}
+{
+    r=primary() ( <MULTIPLY> v=primary() { r *= v; }| <DIVIDE> r=primary() { r /= v; })* {
+        return r;
+    }
+}
+
+public int primary() :
+{int r = 0; Token t = null;}
+{
+(
+  <LPAREN> r=expression() <RPAREN>
+| t=<INTEGER> { r = Integer.parseInt(t.image); }
+) { return r; }
+}
+
 ```
 
-Klassicの構文解析器は自作のパーザコンビネータライブラリで構築されているので少々ややこしく見えますが、要約すると、`CL()`は引数に与えたものの後に任意個のスペース（改行）が来るという意味で、キーワードである`PLUS`や`MINUS`の後にこのような規則を差し込むことで「式の途中での改行は無視」が実現できています。
+の部分はトークン定義になります。ここでは、7つのトークンを定義しています。トークン定義の後が構文規則の定義になります。ここでは、
 
-現在ある言語で採用されているかはわかりませんが、GLR法のようにスキャナレス構文解析と呼ばれる他の手法を使う方法もあります。スキャナレスということは字句解析が無いということですが、字句解析器を別に必要としない構文解析法の総称を指します。PEGも字句解析器を必要としませんから、PEGもスキャナレス構文解析の一種と言えます。
+- `expression()`
+- `add()`
+- `mult()`
+- `primary()`
 
-ともあれ、私達が普通に使っている「改行で文が終わる」ようにできる処理一つとっても厄介な問題だということです。
+の4つの構文規則が定義されています。各構文規則はJavaのメソッドに酷似した形で記述されますが、実際、ここから生成される.javaファイルには同じ名前のメソッドが定義されます。`expression()`が`add()`を呼び出して、`add()`が`mult()`を呼び出して、`mult()`が`primary()`を呼び出すという構図は第2章で既にみた形ですが、第2章と違って単純に宣言的に各構文規則の関係を書けばそれでOKなのが構文解析器生成系の強みです。
 
-## 6.5 Cのtypedef
+このようにして定義した電卓プログラムは次のようにして利用することができます。
 
-C言語の`typedef`文は既存の型に別名をつける機能です。C言語をバリバリ書いているプログラマの型ならお馴染みの機能でしょう。Cのtypdefは
+```java
+package com.github.kmizu.calculator;
 
-- 移植性を高める
-- 関数ポインタを使ったよみづらい宣言を読みやすくする
+import jdk.jfr.Description;
+import org.junit.jupiter.api.Test;
+import com.github.kmizu.calculator.Calculator;
+import java.io.*;
 
-といった目的で使われますが、この`typedef`文が意外に曲者だったりします。以下は`i`をint型の別名として定義するものですが、同時にローカル変数`i`を`i`型として定義しています。
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
-```c
-typedef int i;
-int main(void) {
-        i i = 100; // OK
-        int x = (i)'a'; // ERROR
-        return 0;
+public class CalculatorTest {
+    @Test
+    @Description("1 + 2 * 3 = 7")
+    public void test1() throws Exception {
+        Calculator calculator = new Calculator(new StringReader("1 + 2 * 3"));
+        assertEquals(7, calculator.expression());
+    }
+
+    @Test
+    @Description("(1 + 2) * 4 = 12")
+    public void test2() throws Exception {
+        Calculator calculator = new Calculator(new StringReader("(1 + 2) * 4"));
+        assertEquals(12, calculator.expression());
+    }
+
+    @Test
+    @Description("(5 * 6) - (3 + 4) = 23")
+    public void test3() throws Exception {
+        Calculator calculator = new Calculator(new StringReader("(5 * 6) - (3 + 4)"));
+        assertEquals(23, calculator.expression());
+    }
 }
 ```
 
-現実にこのようなコードの書き方をするかはともかく、`i i = 100;`は明らかにOKな表現として解析してあげなければいけません。一方で、`int x = (i)'a';`は構文解析エラーになります。`i i = 100;`という宣言がなければこの文も通るのですが、合わせて書けば構文解析エラーです。それ以前の文脈である識別子がtypedefされたかどうかで構文解析の結果が変わるのですからとてもややこしいです。
+この`CalculatorTest`クラスではJUnit5を使って、JavaCCで定義した`Calculator`クラスの挙動をテストしています。空白や括弧を含む数式を問題なく計算できているのがわかるでしょう。
 
-C言語ではこのようなややこしい構文を解析するために、typdefした識別子を連想配列の形で持っておいて、構文解析時にそれを使うという手法を採用しています。
+このようなケースでは先読みトークン数が1のため、JavaCCのデフォルトで構いませんが、定義したい構文によっては先読み数を2以上に増やさなければいけないこともあります。そのときは、以下のようにして先読み数を増やすことができます：
 
-## 6.6 Scalaでの「文頭に演算子が来る場合の処理」
+```java
+options {
+  STATIC = false;
+  JDK_VERSION = "17";
+  LOOKAHEAD = 2
+}
+```
 
-6.4 で改行で文を終端する文法について説明しましたが、Scalaはさらにややこしい入力を処理できなければいけません。たとえば、以下のような文を解釈できる必要があります。
+ここでは、`LOOKAHEAD = 2`というオプションによって、先読みトークン数を2に増やしています。LOOKAHEADは固定されていれば任意の正の整数にできるので、JavaCCはデフォルトではLL(1)だが、オプションを設定することによってLL(k)になるともいえます。
+
+また、JavaCCは構文定義ファイルの文法がかなりJavaに似ているため、生成されるコードの形を想像しやすいというメリットがあります。JavaCCはJavaの構文解析生成系の中では最古の部類の割に今でも現役で使われているのは、Javaユーザにとっての使いやすさが背景にあるように思います。
+
+
+## 6.5 Yacc (GNU Bison)：構文解析器生成系の老舗
+
+YaccはYet another compiler compilerの略で、日本語にすると「もう一つのコンパイラコンパイラ」といったところでしょうか。yaccができた当時は、コンパイラを作るためのコンパイラについての研究が盛んだった時期で、構文解析器生成系もそのための研究の副産物とも言えます。1970年代にAT&Tのベル研究所にいたStephen C. Johnsonによって作られたソフトウェアで、非常に歴史がある構文解析器生成系です。YaccはLALR(1)法をサポートし、lexという字句解析器生成系と連携することで構文解析器を生成することができます（もちろん、lexを使わない実装も可能）。Yacc自体は色々な構文解析器生成系に多大な影響を与えており、現在使われているGNU BisonはYaccのGNUによる再実装でもあります。
+
+Yaccを使って、四則演算を行う電卓プログラムを作るにはまず字句解析器生成系であるflex用の定義ファイルを書く必要ががあります。その定義ファイル`token.l`は次のようになります：
+
+```text
+%{
+#include "y.tab.h"
+%}
+
+%%
+[0-9]+      { yylval = atoi(yytext); return NUM; }
+[-+*/()]    { return yytext[0]; }
+[ \t]       { /* ignore whitespce */ }
+"\r\n"      { return EOL; }
+"\r"        { return EOL; }
+"\n"        { return EOL; }
+.           { printf("Invalid character: %s\n", yytext); }
+%%
+```
+
+`%%`から`%%`までがトークンの定義です。これはそれぞれ次のように読むことができます。
+
+- `[0-9]+      { yylval = atoi(yytext); return NUM; }`
+
+  0-9までの数字が1個以上あった場合はに数値として解釈し（`atoi(yytext)`)、トークン`NUM`として返します。
+
+- `[-+*/()]    { return yytext[0]; }`
+
+  `-`,`+`,`*`,`/`,`(`,`)`についてはそれぞれの文字をそのままトークンとして返します。
+
+- `[ \t]       { /* ignore whitespce */ }`
+
+  タブおよびスペースは単純に無視します
+
+- `"\r\n"      { return EOL; }`
+
+  改行はEOLというトークンとして返します
+
+- `"\r"        { return EOL; }`
+
+  前に同じ
+
+- `"\n"        { return EOL; }`
+
+  前に同じ
+
+- `.           { printf("Invalid character: %s\n", yytext); }`
+
+  それ以外の文字が来たらエラーを吐きます
+
+このトークン定義ファイルを入力として与えると、flexは`lex.yy.c`という形で字句解析器を出力します。
+
+次に、yaccの構文定義ファイルを書きます：
+
+```text
+%{
+#include <stdio.h>
+int yylex(void);
+void yyerror(char const *s);
+int yywrap(void) {return 1;}
+extern int yylval;
+%}
+
+%token NUM
+%token EOL
+%left '+' '-'
+%left '*' '/'
+
+%%
+
+input : expr EOL
+      { printf("Result: %d\n", $1); }
+      ;
+
+expr : NUM
+      { $$ = $1; }
+      | expr '+' expr
+      { $$ = $1 + $3; }
+      | expr '-' expr
+      { $$ = $1 - $3; }
+      | expr '*' expr
+      { $$ = $1 * $3; }
+      | expr '/' expr
+      {
+        if ($3 == 0) { yyerror("Cannot divide by zero."); }
+        else { $$ = $1 / $3; }
+      }
+      | '(' expr ')'
+      { $$ = $2; }
+      ;
+
+
+void yyerror(char const *s)
+{
+  fprintf(stderr, "Parse error: %s\n", s);
+}
+
+int main()
+{
+  yyparse();
+}
+```
+
+flexの場合と同じく、`%%`から`%%`までが構文規則の定義の本体です。実行されるコードが入っているので読みづらくなっていますが、それを除くと以下のようになります：
+
+```text
+% {
+%token NUM
+%token EOL
+%left '+' '-'
+%left '*' '/'
+}
+
+%%
+input : expr EOL
+      { printf("Result: %d\n", $1); }
+      ;
+
+expr : NUM
+      | expr '+' expr
+      | expr '-' expr
+      | expr '*' expr
+      | expr '/' expr
+      | '(' expr ')'
+      ;
+%%
+```
+
+だいぶ見やすくなりましたね。入力を表す`input`規則は`expr EOL`からなります。`expr`は式を表す規則ですから、その後に改行が来れば`input`は終了となります。
+
+次に、`expr`規則ですが、ここではyaccの優先順位を表現するための機能である`%left`を使ったため、優先順位のためだけに規則を作る必要がなくなっており、定義が簡潔になっています。ともあれ、こうして定義された文法定義ファイルをyaccに与えると`y.tab.c`というファイルを出力します。
+
+flexとyaccが出力したファイルを結合して実行ファイルを作ると、次のような入力に対して：
+
+```
+1 + 2 * 3
+2 + 3
+6 / 2
+3 / 0
+```
+
+それぞれ、次のような出力を返します。
+
+```
+Result: 7
+Result: 5
+Result: 3
+Parse error: Cannot divide by zero.
+```
+
+yaccはとても古いソフトウェアの一つですが、Rubyの文法定義ファイルparse.yはyacc用ですし、未だに各種言語処理系では現役で使われてもいます。
+
+## 6.6 ANTLR：多言語対応の強力な下向き構文解析生成系
+
+1989年にPurdue Compiler Construction set(PCCTS)というものがありました、ANTLRはその後継というべきもので、これまでに、LL(k) -> LL(*) -> ALL(*)と取り扱える文法の幅を広げつつアクティブに開発が続けられています。作者はTerence Parrという方ですが、構文解析器一筋（？）と言っていいくらい、ANTLRにこれまでの時間を費やしてきている人です。
+
+それだけに、ANTLRの完成度は非常に高いものになっています。また、一時期はLR法に比べてLL法の評価は低いものでしたが、Terence ParrがLL(k)を改良していく過程で、LL(*)やALL(*)のようなLR法に比べてもなんら劣らない、しかも実用的にも使いやすい構文解析法の発明に貢献したということができます。
+
+ANTLRはJava、C++などいくつもの言語を扱うことができますが、特に安心して使えるのはJavaです。以下は先程と同様の、四則演算を解析できる数式パーザをANTLRで書いた場合の例です。
+
+ANTLRでは構文規則は、`規則名 : 本体 ;` という形で記述しますが、LLパーザ向けの構文定義を素直に書き下すだけでOKです。
+
+```java
+grammar Expression;
+
+expression returns [int e]
+    : v=additive {$e = $v.e;}
+    ;
+
+additive returns [int e = 0;]
+    : l=multitive {$e = $l.e;} (
+      '+' r=multitive {$e = $e + $r.e;}
+    | '-' r=multitive {$e = $e - $r.e;}
+    )*
+    ;
+
+multitive returns [int e = 0;]
+    : l=primary {$e = $l.e;} (
+      '*' r=primary {$e = $e * $r.e;}
+    | '/' r=primary {$e = $e / $r.e;}
+    )*
+    ;
+
+primary returns [int e]
+    : n=NUMBER {$e = Integer.parseInt($n.getText());}
+    | '(' x=expression ')' {$e = $x.e;}
+    ;
+
+LP : '(' ;
+RP : ')' ;
+NUMBER : INT ;
+fragment INT :   '0' | [1-9] [0-9]* ; // no leading zeros
+WS  :   [ \t\n\r]+ -> skip ;
+
+```
+
+規則`expression`が数式を表す規則です。そのあとに続く`returns [int e]`はこの規則を使って解析を行った場合に`int`型の値を返すことを意味しています。これまで見てきたように構文解析器をした後には抽象構文木をはじめとして何らかのデータ構造を返す必要があります。`returns ...`はそのために用意されている構文です。名前が全て大文字の規則はトークンを表しています。
+
+数式を表す各規則についてはこれまで書いてきた構文解析器と同じ構造なので読むのに苦労はしないでしょう。
+
+規則`WS`は空白文字を表すトークンですが、これは数式を解析する上では読み飛ばす必要があります。 `[ \t\n\r]+ -> skip`は
+
+- スペース
+- タブ文字
+- 改行文字
+
+のいずれかが出現した場合は読み飛ばすということを表現しています。
+
+ANTLRは下向き型の構文解析が苦手とする左再帰もある程度扱うことができます。先程の定義ファイルでは繰り返しを使っていましたが、これを左再帰に直した以下の定義ファイルも全く同じ挙動をします。
+
+```java
+grammar LRExpression;
+
+expression returns [int e]
+    : v=additive {$e = $v.e;}
+    ;
+
+additive returns [int e]
+    : l=additive op='+' r=multitive {$e = $l.e + $r.e;}
+    | l=additive op='-' r=multitive {$e = $l.e - $r.e;}
+    | v=multitive {$e = $v.e;}
+    ;
+
+multitive returns [int e]
+    : l=multitive op='*' r=primary {$e = $l.e * $r.e;}
+    | l=multitive op='/' r=primary {$e = $l.e / $r.e;}
+    | v=primary {$e = $v.e;}
+    ;
+
+primary returns [int e]
+    : n=NUMBER {$e = Integer.parseInt($n.getText());}
+    | '(' x=expression ')' {$e = $x.e;}
+    ;
+
+LP : '(' ;
+RP : ')' ;
+NUMBER : INT ;
+fragment INT :   '0' | [1-9] [0-9]* ; // no leading zeros
+WS  :   [ \t\n\r]+ -> skip ;
+```
+
+左再帰を使うことでより簡単に文法を定義できることもあるので、あると嬉しい機能だと言えます。
+
+さらに、ANTLRは`ALL(*)`というアルゴリズムを採用しているため、通常のLLパーザでは扱えないような文法定義も取り扱うことができます。以下の「最小XML」文法定義を見てみましょう。
+
+```java
+grammar PetitXML;
+@parser::header {
+    import static com.github.asciidwango.parser_book.ch5.PetitXML.*;
+    import java.util.*;
+}
+
+root returns [Element e]
+    : v=element {$e = $v.e;}
+    ;
+
+element returns [Element e]
+    : ('<' begin=NAME '>' es=elements '</' end=NAME '>' {$begin.text.equals($end.text)}?
+      {$e = new Element($begin.text, $es.es);})
+    | ('<' name=NAME '/>' {$e = new Element($name.text);})
+    ;
+
+elements returns [List<Element> es]
+    : { $es = new ArrayList<>();} (element {$es.add($element.e);})*
+    ;
+
+LT: '<';
+GT: '>';
+SLASH: '/';
+NAME:  [a-zA-Z_][a-zA-Z0-9]* ;
+
+WS  :   [ \t\n\r]+ -> skip ;
+```
+
+`PeitXML`の名の通り、属性やテキストなどは全く扱うことができず、`<a>`や`<a/>`、`<a><b></b></a>`といった要素のみを扱うことができます。規則`element`が重要です。
+
+```
+element returns [Element e]
+    : ('<' begin=NAME '>' es=elements '</' end=NAME '>' {$begin.text.equals($end.text)}?
+      {$e = new Element($begin.text, $es.es);})
+    | ('<' name=NAME '/>' {$e = new Element($name.text);})
+    ;
+```
+
+ここで空要素（`<e/>`など）に分岐するか、子要素を持つ要素（`<a><b/></a>`など）に分岐するかを決定するには、`<`に加えて、任意の長さになり得るタグ名まだ先読みしなければいけません。通常のLLパーザでは何文字（何トークン）先読みしているのは予め決定されているのでこのような文法定義を取り扱うことはできません。しかし、ANTLRの`ALL(*)`アルゴリズムとその前身となる`LL(*)`アルゴリズムでは任意個の文字数を先読みして分岐を決定することができます。
+
+ANTLRでは通常のLLパーザで文法を記述する上での大きな制約がないわけで、これは非常に強力です。理論的な意味での記述能力でも`ALL(*)`アルゴリズムは任意の決定的な文脈自由言語を取り扱うことができます。
+
+また、`ALL(*)`アルゴリズム自体とは関係ありませんが、XMLのパーザを書くときには開きタグと閉じタグの名前が一致している必要があります。この条件を記述するために`PetitXML`では次のように記述されています。
+
+```java 
+'<' begin=NAME '>' es=elements '</' end=NAME '>' {$begin.text.equals($end.text)}?
+```
+
+この中の`{$begin.text.equals($end.text)}?`という部分はsemantic predicateと呼ばれ、プログラムとして書かれた条件式が真になるときにだけマッチします。semantic predicateのような機能はプログラミング言語をそのまま埋め込むという意味で、正直「あまり綺麗ではない」と思わなくもないですが、実用上はsemantic predicateを使いたくなる場面にしばしば遭遇します。
+
+ANTLRはこういった実用上重要な痒いところにも手が届くように作られており、非常によくできた構文解析機生成系といえるでしょう。
+
+## 6.7 SComb
+
+手前味噌ですが、拙作のパーザコンビネータである[SComb](https://github.com/kmizu/scomb)も紹介しておきます。これまで紹介してきたものはすべて構文解析器生成系です。つまり、独自の言語を用いて作りたい言語の文法を記述し、そこから**対象言語**（CであったりJavaであったり様々ですが）で書かれた構文解析器を生成するものだったわけですが、パーザコンビネータは少々違います。
+
+パーザコンビネータでは対象言語のメソッドや関数、オブジェクトとして構文解析器を定義し、演算子やメソッドによって構文解析器を組み合わせることで構文解析器を組み立てていきます。パーザコンビネータではメソッドや関数、オブジェクトとして規則自体を記述するため、特別にプラグインを作らなくてもIDEによる支援が受けられることや、対象言語が静的型システムを持っていた場合、型チェックによる支援を受けられることがメリットとして挙げられます。
+
+SCombで四則演算を解析できるプログラムを書くと以下のようになります。先程述べたようにSCombはパーザコンビネータであり、これ自体がScalaのプログラム（`object`宣言）でもあります。
 
 ```scala
-val x = 1
-      + 2
-println(x) // 3
+object Calculator extends SCombinator {
+  // root ::= E 
+  def root: Parser[Int] = E
+
+  // E ::= A
+  def E: Parser[Int] = rule(A)
+
+  // A ::= M ("+" M | "-" M)* 
+  def A: Parser[Int] = rule(chainl(M) {
+    $("+").map { op => (lhs: Int, rhs: Int) => lhs + rhs } |
+    $("-").map { op => (lhs: Int, rhs: Int) => lhs - rhs }
+  })
+
+  // M ::= P ("+" P | "-" P)* 
+  def M: Parser[Int] = rule(chainl(P) {
+    $("*").map { op => (lhs: Int, rhs: Int) => lhs * rhs } |
+    $("/").map { op => (lhs: Int, rhs: Int) => lhs / rhs }
+  })
+
+  // P ::= "(" E ")" | N
+  def P: P[Int] = rule{
+    (for {
+      _ <- string("("); e <- E; _ <- string(")")} yield e) | N
+  }
+  
+  // N ::= [0-9]+ 
+  def N: P[Int] = rule(set('0'to'9').+.map{ digits => digits.mkString.toInt})
+
+  def parse(input: String): Result[Int] = parse(root, input)
+}
 ```
 
-ここで、xを3とちゃんと解釈するには`val x = 1`が改行で終わったから「文が終わった」と解釈せず、次のトークンである`+`まで見てから文が終わるか判定する必要があります。これまで試した限り、同じことができるのはJavaScriptくらいで、Ruby、Python、Kotlin、Go、Swiftなどの言語ではエラーになるか、`x = 1`で文が終わったと解釈され、`+ 2`は別の文として解釈されるケースばかりでした。
-
-この処理について、Scala言語仕様内の[1.2 Newline Characters](https://scala-lang.org/files/archive/spec/2.13/01-lexical-syntax.html)に関連する記述があります。
-
-> Scala is a line-oriented language where statements may be terminated by semi-colons or newlines. A newline in a Scala source text is treated as the special token “nl” if the three following criteria are satisfied:
->   1. The token immediately preceding the newline can terminate a statement.
->   2. The token immediately following the newline can begin a statement.
->   3. The token appears in a region where newlines are enabled.
-> The tokens that can terminate a statement are: literals, identifiers and the following delimiters and reserved words:
-
-これを意訳すると、通常の場合はScalaの文はセミコロンまたは改行で終わることができるが、次の三つの条件**全て**を満たしたときのみ、特別なトークン`nl`として扱われることになる、ということになります。
-
-1. 改行の直前のトークンが「文を終わらせられる」ものである場合
-2. 改行の直後のトークンが「文を始められる」ものである場合
-3. 改行が「利用可能」になっている箇所にあらわれたものである場合
-
-たとえば、以下のScalaプログラムについていうと、最初の改行は`nl`トークンになりませんが、何故かというと条件1が満たされても条件2が満たされないからです。
-
-```scala
-val x = 1
-      + 2
-```
-
-ちなみに、調査を開始する時点ではScalaの文法の基本文法を継承したKotlinでも同じようになっていると思っていたのですが、一行目で文が終わると解釈されてしまいました。
-
-```kotlin
-val x = 1
-      + 2 // + 2は単独の式として解釈されてしまう
-println(x) // 1
-```
-
-## 6.7 プレースホルダー構文
-
-Scalaにはプレースホルダー構文、正確にはPlaceholder Syntax for Anonymous Functionと呼ばれる構文があります。これは最近の言語ではすっかり普通に使えるようになったいわゆる**ラムダ式**を簡易表記するための構文です。
-
-たとえば、Scalaで`[1, 2, 3, 4]`というリストの要素全てを2倍するという処理はラムダ式（Scalaでは単純に無名関数という用語）を使って次のように書くことができます。
-
-```scala
-List(1, 2, 3, 4).map(x => x + 1)
-```
-
-ラムダ式を普段から使っておられる読者には大体雰囲気で伝わると思うのですが、`map`は多くの言語で採用されている高階関数です。`map`は引数で渡された無名関数をリストの各要素に適用して、その結果できた新しいリストを返します。たとえば、上のプログラムだと実行結果は次のようになります。
-
-
-```scala
-List(2, 4, 6, 8)
-```
-
-しかし、`map()`に渡す無名関数を毎回`x => x + 1`のように書かないといけないのも冗長です。というわけで、Scalaでは次のように無名関数を簡易表記することができます。
-
-```scala
-List(1, 2, 3, 4).map(_ + 1)
-```
-
-これは構文解析のときに、先程の
-
-```scala
-List(1, 2, 3, 4).map(x => x + 1)
-```
-
-に展開されます。出てくる`_`のことをプレースホルダ（placeholder）と呼びます。例によってこの構文は非常に扱いが厄介です。何故かというと、`_`がどのような無名関数を表すかを構文解析時に決定するのはかなり困難なのです。すぐに思いつくのは、`_`はそれを囲む「最小の式」を無名関数に変換すると定義という方法です。しかし、これはプレースホルダが二つ以上出てくると破綻します。
-
-たとえば、別の高階関数`foldLeft()`を使った例を見てみます。
-
-```scala
-List(1, 2, 3, 4).foldLeft(0)(_ + _)
-```
-
-リスト`[1, 2, 3, 4]`の合計値である`10`を計算してくれます。このプレースホルダ構文は次のように変換されます。
-
-```scala
-List(1, 2, 3, 4).foldLeft(0)((x, y) => x + y)
-```
-
-このケースでは、`(_ + _)`が`((x, y) => x + y)`という無名関数に変換されたわけですが、プレースホルダが複数出現するとややこしい問題になります。
-
-
-また、そもそもプレースホルダが単一であっても解釈が難しい問題もあります。たとえば、次の式は考えてみます。
-
-```scala
-List(1, 2, 3, 4).map(_ * 2 + 3)
-```
-
-これは以下のScalaプログラムに変換されます。
-
-```scala
-List(1, 2, 3, 4).map(x => x * 2 + 3)
-````
-
-もし、`_`を含む「最小の式」を無名関数にするという方式だと`(_ * 2)`が`(x => x * 2)`という無名関数に変換されても良さそうですがそうはなっていません。また、ユーザーのニーズを考えてもそうなっては欲しくありません。
-
-Scalaではこのプレースホルダ構文をどう扱っているかというと非常に複雑で一言では説明しきれない部分があるのですが、あえておおざっぱに要約すると、次のようになります。
-
-1. `_` をアンダースコアセクション（underscore section）と呼ぶ
-2. 無名関数になる範囲の式`e`は構文カテゴリ（syntactic category）`Expr`に属しており、アンダースコアセクション`u`について次の条件を満たす必要がある：
-  2-1. `e`は真に（property）`u`を含んでいる
-  2-2. `e`の中に構文カテゴリ`Expr`に属する式は存在しない
-
-といっても、これだけだとわかりませんよね。たとえば、
+各メソッドに対応するBNFによる規則をコメントとして付加してみましたが、BNFと比較しても簡潔に記述できているのがわかります。Scalaは記号をそのままメソッドとして記述できるなど、元々DSLに向いている特徴を持った言語なのですが、その特徴を活用しています。`chainl`というメソッドについてだけは見慣れない読者の方は多そうですが、これは
 
 ```
-map(_ * 2 + 3)
+// M ::= P ("+" P | "-" P)* 
 ```
 
-では`_ * 2 + 3`までが「無名関数化」される範囲ですが、これをいったん括弧つきで表記すると`(_ * 2) + 3`となります。Scalaの構文解析上のルールでは、演算子を使った式は単独では構文カテゴリ`Expr`に属しません。メソッドの引数になっている`(_ * 2 + 3)`まで来て初めて、この式は構文カテゴリ`Expr`になります。
+のような二項演算を簡潔に記述するためのコンビネータ（メソッド）です。パーザコンビネータの別のメリットとして、BNF（あるいはPEG）に無いような演算子をこのように後付で導入できることも挙げられます。構文規則からの値（意味値）の取り出しもScalaのfor式を用いて簡潔に記述できています。
 
-端的に言って、この時点で既に目眩がするような内容です。というのは、構文カテゴリという情報自体が構文解析の途中でなければ取り出せない情報であり、つまり、Scalaでは構文解析の*途中*にうまくプレースホルダを処理する必要があるのです。このプレースホルダ構文をきっちり解説するのは本書の内容を超えますが、やはりこの問題も文脈自由言語の範囲で扱うことができません。
+筆者は自作言語Klassicの処理系作成のためにSCombを使っていますが、かなり複雑な文法を記述できるにも関わらず、SCombのコア部分はわずか600行ほどです。それでいて高い拡張性や簡潔な記述が可能なのは、Scalaという言語の能力と、SCombがベースとして利用しているPEGという手法のシンプルさがあってのものだと言えるでしょう。
 
-Scala処理系内部でプレースホルダ構文がどのように実装されているかも読んだことがありますが、とてもややこしくいものでした。C言語のtypedefは構文解析の途中で連想配列に名前を登録すればいいだけまだマシですが、さらに厄介だというのが正直な印象です。
+## 6.8 パーザコンビネータJCombを自作しよう！
 
-なお、プレースホルダ構文について「きちんとした定義」を参照されたい方は、[Scala Language Specification 6.23.2: Placeholder Syntax for Anonymous Function](https://www.scala-lang.org/files/archive/spec/2.13/06-expressions.html#placeholder-syntax-for-anonymous-functions)を読んでいただければと思います。
+コンパイラについて解説した本は数えきれないほどありますし、その中で構文解析アルゴリズムについて説明した本も少なからずあります。しかし、構文解析アルゴリズムについてのみフォーカスした本はParsing Techniquesほぼ一冊といえる現状です。その上でパーザコンビネータの自作まで踏み込んだ書籍はほぼ皆無と言っていいでしょう。読者の方には「さすがにちょっとパーザコンビネータの自作は無理があるのでは」と思われた方もいるのではないでしょうか。
 
-## 6.7 エラーリカバリ
+しかし、驚くべきことに、現代的な言語であればパーザコンビネータを自作するのは本当に簡単です。きっと、多くの読者の方々が拍子抜けしてしまうくらいに。この節ではJavaで書かれたパーザコンビネータJCombを自作する過程を通じて皆さんにパーザコンビネータとはどのようなものかを学んでいただきます。パーザコンビネータと構文解析器生成系は物凄く雑に言ってしまえば近縁種のようなものですし、パーザコンビネータの理解は構文解析器生成系の仕組みの理解にも役立つはずです。きっと。
 
-構文解析の途中でエラーが起きることは（当然ながら）普通にあります。構文解析中のエラーリカバリについては多くの研究があるものの、コンパイラの教科書で構文解析アルゴリズでのエラーリカバリについて言及されることは稀です。推測ですが、構文解析において２つ目以降のエラーは大抵最初のエラーに誘発されて起こるということや、どうしても経験則に頼った記述になりがちなため、教科書で言及されることは少ないのでしょう。また、大抵の言語処理系で構文解析中のエラーリカバリについては大したことをしていなかったという歴史的事情もあるかもしれません。
+まず復習になりますが、構文解析器というのは文字列を入力として受け取って、解析結果を返す関数（あるいはオブジェクト）とみなせるのでした。これはパーザコンビネータ、特にPEGを使ったパーザコンビネータを実装するときに有用な見方です。この「構文解析器はオブジェクトである」を文字通りとって、以下のようなジェネリックなインタフェース`JParser<R>`を定義します。
 
-しかし、現在は別の観点から構文解析中のエラーリカバリが重要性を増してきています。それは、テキストエディタの拡張としてIDEのような「構文解析エラーになるが、それっぽくなんとか構文解析をしなければいけない」というニーズがあるからです。
+```java
+interface JParser<R> {
+  Result<R> void parse(String input);
+}
+```
 
-TBD
+ここで構文解析器を表現するインタフェース`JParser<R>`は型パラメータ`R`を受け取ることに注意してください。一般に構文解析の結果は抽象構文木になりますが、インタフェースを定義する時点では抽象構文木がどのような形になるかはわかりようがないので、型パラメータにしておくのです。`JParser<R>`はたった一つのメソッド`parse()`を持ちます。`parse()`は入力文字列`input`を受け取り、解析結果を`Result<R>`として返します。
 
-## 6.8 まとめ
+`JParser<R>`の実装は一体全体どのようなものになるの？という疑問を脇に置いておけば理解は難しくないでしょう。次に解析結果`Result<V>`をレコードとして定義します。
 
-6章では現実の構文解析で遭遇する問題について、いくつかの例を挙げて説明しました。筆者が大学院博士後期課程に進学した頃「構文解析は終わった問題」と言われたのを覚えていますが、実際にはその後もANTLRの`LL(*)`アルゴリズムのような革新が起きていますし、細かいところでは今回の例のように従来の構文解析法単体では取り扱えない部分をアドホックに各プログラミング言語が補っている部分があります。
+```java
+record Result<V>(V value, String rest){}
+```
 
-このような問題が起きるのは結局のところ、当初の想定と違って「プログラミング言語は文脈自由言語として表せ」なかったという事です。より厳密には当然、文脈自由言語の範囲に納めることもできますが、便利な表記を許していくとどうしても文脈自由言語から「はみ出て」しまうということです。このような「現実のプログラミング言語の文脈依存性」については専門の研究者以外には案外知られていなかったりしますが、ともあれこのような問題があることを知っておくのは、既存言語の表記法を取り入れた新しい言語を設計するときにも有益でしょう。
+レコード`Result<V>`は解析結果を保持するクラスです。`value`は解析結果の値を表現し、`rest`は解析した結果「残った」文字列を表します。
+
+このインタフェース`JParser<R>`は次のように使えると理想的です。
+
+```java
+JParser<Integer> calculator = ...;
+Result<Integer> result = calculator.parse("1+2*3");
+assert 7 == result.value();
+```
+
+パーザコンビネータは、このようなどこか都合の良い`JParser<R>`を、BNF（あるいはPEG）に近い文法規則を連ねていくのに近い使い勝手で構築するための技法です。前の節で紹介した`SComb`もパーザコンビネータでしたが基本的には同じようなものです。
+
+この節では最終的に上のような式を解析できるパーザコンビネータを作るのが目標です。
+
+### 6.8.1 部品を考えよう
+
+これからパーザコンビネータを作っていくわけですが、パーザコンビネータの基本となる「部品」を作る必要があります。
+
+まず最初に、文字列リテラルを受け取ってそれを解析できる次のような`string()`メソッドは是非とも欲しいところです。
+
+```java
+assert new Result<String>("123", "").equals(string("123").parse("123"));
+```
+
+これはBNFで言えば文字列リテラルの表記に相当します。
+
+次に、解析に成功したとしてその値を別の値に変換するための方法もほしいところです。たとえば、`123`という文字列を解析したとして、これは最終的に文字列ではなくintに変換したいところです。このようなメソッドは、ラムダ式で変換を定義できるように、次のような`map()`メソッドとして提供したいところです。
+
+```java
+<T, U> JParser<U> map(Parser<T> parser, Function<T, U> function);
+assert (new Result<Integer>(123, "")).equals(map(string("123"), v -> Integer.parseInt(v)).parse("123"));
+```
+
+これは構文解析器生成系でセマンティックアクションを書くのに相当すると言えるでしょう。
+
+BNFで`a | b`、つまり選択を書くのに相当するメソッドも必要です。これは次のような`alt()`メソッドとして提供します。
+
+```java
+<T> JParser<T> alt(Parser<T> p1, Parser<T> p1);
+assert (new Result<String>("bar", "")).equals(alt(string("foo"), string("bar")));
+```
+
+同様に、BNFで`a b`、つまり連接」を書くのに相当するメソッドも必要ですが、これは次のような`seq()`メソッドとして提供します。
+
+```java
+record Pair<A, B>(A a, B b){}
+<T> JParser<Pair<T>> seq(Parser<T> p1, Parser<T> p2);
+assert (new Result<>(new Pair("foo", "bar"), "")).equals(seq(string("foo"), string("bar")))
+```
+
+最後に、BNFで`a*`、つまり0回以上の繰り返しに相当する`rep0()`メソッド
+
+```java
+<T> JParser<List<T>> rep0(Parser<T> p);
+assert (new Result<List<String>>(List.of(), "")).equals(rep0(string("")))
+```
+
+や`a+`、つまり1回以上の繰り返しに相当する`rep1()`メソッドもほしいところです。
+
+```java
+<T> JParser<List<T>> rep1(Parser<T> p);
+assert (new Result<List<String>>(List.of("a", "a", "a"), "")).equals(rep1(string("aaa")))
+```
+
+この節ではこれらのプリミティブなメソッドの実装方法について説明していきます。
+
+### 6.8.2 `string()`メソッド
+
+まず最初に`string(String literal)`メソッドで返す`JParser<String>`の中身を作ってみましょう。`JParser`クラスはただ一つのメソッド`parser()`をもつので次のような実装になります。
+
+```java
+class JLiteralParser implements JParser<String> {
+  private String literal;
+  public JLiteralParser(String literal) {
+    this.literal = literal;
+
+  }
+  public Result<String> parse(String input) {
+    if(input.startsWith(literal)) {
+      return new Result<String>(literal, input.substring(literal.length()));
+    } else {
+      return null;
+    }
+  }
+}
+```
+
+このクラスは次のようにして使います。
+
+```java
+assert new Result<String>("foo", "").equals(new JLiteralParser("foo"));
+```
+
+リテラルを表すフィールド`literal`が`input`の先頭とマッチした場合、`literal`と残りの文字列からなる`Result<String>`を返します。そうでない場合は返すべき`Result`がないので`null`を返します。簡単ですね。あとはこのクラスのインスタンスを返す`string()`メソッドを作成するだけです。なお、使うときの利便性のため、以降では各種メソッドはクラス`JComb`のstaticメソッドとして実装していきます。
+
+```java
+public class JComb {
+  JParser<String> string(String literal) {
+    return new JLiteralParser(literal);
+  }
+}
+```
+
+使う時は次のようになります。
+
+```java
+JParser<String> foo = string("foo");
+assert new Result<String>("foo", "_bar").equals(foo.parse("foo_bar"));
+assert null == foo.parse("baz");
+```
+
+### 6.8.3 `alt()`メソッド
+
+次に二つのパーザを取って「選択」パーザを返すメソッド`alt()`を実装します。先程のようにクラスを実装してもいいですが、メソッドは一つだけなのでラムダ式にします。
+
+```java
+public class JComb {
+    // p1 / p2
+    public static <A> JParser<A> alt(JParser<A> p1, JParser<A> p2) {
+        return (input) -> {
+            var result = p1.parse(input);//(1)
+            if(result != null) return result;//(2)
+            return p2.parse(input);//(3)
+        };
+    }
+}
+```
+
+ラムダ式について復習しておくと、これは実質的には以下のような匿名クラスを書いたのと同じになります。
+
+```java
+public class JComb {
+    public static <A> JParser<A> alt(JParser<A> p1, JParser<A> p2) {
+        return new JAltParser<A>(p1, p2);
+    }
+}
+
+class JAltParser<A> implements JParser<A> {
+  private JParser<A> p1, p2;;
+  public JAltParser(Parser<A> p1, Parser<A> p2) {
+    this.p1 = p1;
+    this.p2 = p2;
+  }
+  public Result<String> parse(String input) {
+    var result = p1.parse(input);
+    if(result != null) return result;
+    return p2.parse(input);
+  }
+}
+```
+
+この定義では、
+
+(1) まずパーザ`p1`を試しています
+(2) `p1`が成功した場合は`p2`を試すことなく値をそのまま返します
+(3) `p1`が失敗した場合、`p2`を試しその値を返します
+
+のような挙動をします。
+
+しかしこれはBNFというよりPEGの挙動です。そうです。実は今ここで作っているパーザコンビネータである`JComb`は（`SComb`）PEGをベースとしたパーザコンビネータだったのです。もちろん、PEGベースでないパーザコンビネータを作ることも出来るのですが実装がかなり複雑になってしまいます。PEGの挙動をそのままプログラミング言語に当てはめるのは非常に簡単であるため、今回はPEGを採用しましたが、もし興味があればBNFベース（文脈自由文法ベース）のパーザコンビネータも作ってみてください。
+
+### 6.8.4 `seq()`メソッド
+
+次に二つのパーザを取って「連接」パーザを返すメソッド`seq()`を実装します。先程と同じくラムダ式にしてみます。
+
+```java
+record Pair<A, B>(A a, B b){}
+// p1 p2
+public class JComb {
+    public static <A, B> JParser<Pair<A, B>> seq(JParser<A> p1, JParser<B> p2) {
+        return (input) -> {
+            var result1 = p1.parse(input); //(1-1)
+            if(result1 == null) return null; //(1-2)
+            var result2 = p2.parse(result1.rest()); //(2-1) 
+            if(result2 == null) return null; //(2-2)
+            return new Result<>(new Pair<A, B>(result1.value(), result2.value()), result2.rest());//(2-3)
+        };
+    }
+}
+```
+
+先程の`alt()`メソッドと似通った実装ですが、p1が失敗したら全体が失敗する（nullを返す：(1-2)）のがポイントです。p1とp2の両方が成功した場合は、二つの値のペアを返しています（2-3）。
+
+#### 6.8.5 `rep0()`, `rep1()`メソッド
+
+残りは0回以上の繰り返し（`p*`）を表す`rep0()`と1回以上の繰り返し（`p+`）を表す`rep1()`メソッドです。
+
+まず、`rep0()`メソッドは次のようになります。
+
+```java
+public class JComb {
+    public static <A> JParser<List<A>> rep0(JParser<A> p) {
+        return (input) -> {
+            var result = p.parse(input); // (1)
+            if(result == null) return new Result<>(List.of(), input); // (2)
+            var value = result.value();
+            var rest = result.rest();
+            var result2 = rep0(p).parse(rest); //(3)
+            if(result2 == null) return new Result<>(List.of(value), rest);
+            List<A> values = new ArrayList<>();
+            values.add(value);
+            values.addAll(result2.value());
+            return new Result<>(values, result2.rest());
+        };
+    }
+}
+```
+
+(1)でまずパーザ`p`を適用しています。ここで失敗した場合、0回の繰り返しにマッチしたことになるので、空リストからなる結果を返します（(2)）。そうでなければ、1回以上の繰り返しにマッチしたことになるので、繰り返し同じ処理をする必要がありますが、これは再帰呼出しによって簡単に実装できます（(3)）。シンプルな実装ですね。
+
+
+`rep1(p)`は意味的には`seq(p, rep0(p))`なので、次のようにして実装を簡略化することができます。
+
+
+```java 
+public class JComb {
+    public static <A> JParser<List<A>> rep1(JParser<A> p) {
+        JParser<Pair<A, List<A>>> rep1Sugar = seq(p, rep0(p));
+        return (input) -> {
+            var result = rep1Sugar.parse(input);//(1)
+            if(result == null) return null;//(2)
+            var values = new ArrayList<>();
+            values.add(rep1Sugar.b());
+            values.addAll(rep1Sugar.b());
+            return new Result<>(values, result.rest()); //(3)
+        };
+    }
+}
+```
+
+実質的な本体は(1)だけで、あとは結果の値が`Pair`なのを`List`に加工しているだけですね。
+
+### 6.8.6 `map()`メソッド
+
+パーザを加工して別の値を生成するためのメソッド`map()`をに実装してみましょう。`map()`は`JParser<R>`のメソッドとして実装するとメソッドチェインが使えて便利なので、インタフェースの`default`メソッドとして実装します。
+
+
+```java
+interface JParser<R> {
+    Result<R> parse(String input);
+
+    default <T> JParser<T> map(Function<R, T> f) {
+        return (input) -> {
+            var result = this.parse(input);
+            if (result == null) return null;
+            return new Result<>(f.apply(result.value()), result.rest()); (1)
+        };
+    }
+}
+```
+
+(1)で`f.apply(result.value())`として値を加工しているのがポイントでしょうか。
+
+### 6.8.7 `lazy()`メソッド
+
+パーザを遅延評価するためのメソッド`lazy()`も導入します。Javaはデフォルトでは遅延評価を採用しない言語なので、再帰的な規則を記述するときにこのようなメソッドがないと無限に再帰してスタックオーバーフローを起こしてしまいます。
+
+```java
+public class JComb {
+    public static <A> JParser<A> lazy(Supplier<JParser<A>> supplier) {
+        return (input) -> supplier.get().parse(input);
+    }
+}
+```
+
+### 6.8.8 `regex()`メソッド
+
+せっかくなので正規表現を扱うメソッド`regex()`も導入してみましょう。
+
+```java
+public class JComb {
+    public static JParser<String> regex(String regex) {
+        return (input) -> {
+            var matcher = Pattern.compile(regex).matcher(input);
+            if(matcher.lookingAt()) {
+                return new Result<>(matcher.group(), input.substring(matcher.end()));
+            } else {
+                return null;
+            }
+        };
+    }
+}
+```
+
+引数として与えられた文字列を`Pattern.compile()`で正規表現に変換して、マッチングを行うだけです。これは次のようにして使うことができます。
+
+```java
+var number = regex("[0-9]+").map(v -> Integer.parseInt(v));
+assert (new Result<Integer>(10, "")).equals(number.parse("10"));
+```
+
+### 6.8.9 算術式のインタプリタを書いてみる
+
+ここまでで作ったクラス`JComb`と`JParser`などを使っていよいよ簡単な算術式のインタプリタを書いてみましょう。仕様は次の通りです。
+
+- 扱える数値は整数のみ
+- 演算子は加減乗除（`+|-|*|/`）のみ
+- `()`によるグルーピングができる
+
+実装だけを提示すると次のようになります。
+
+```java
+public class Calculator {
+   public static JParser<Integer> expression() {
+        /*
+         * expression <- additive ( ("+" / "-") additive )*
+         */
+        return seq(
+                lazy(() -> additive()),
+                rep0(
+                        seq(
+                                alt(string("+"), string("-")),
+                                lazy(() -> additive())
+                        )
+                )
+        ).map(p -> {
+            var left = p.a();
+            var rights = p.b();
+            for (var right : rights) {
+                var op = right.a();
+                var rightValue = right.b();
+                if (op.equals("+")) {
+                    left += rightValue;
+                } else {
+                    left -= rightValue;
+                }
+            }
+            return left;
+        });
+    }
+
+    public static JParser<Integer> additive() {
+        /*
+         * additive <- primary ( ("*" / "/") primary )*
+         */
+        return seq(
+                lazy(() -> primary()),
+                rep0(
+                        seq(
+                                alt(string("*"), string("/")),
+                                lazy(() -> primary())
+                        )
+                )
+        ).map(p -> {
+            var left = p.a();
+            var rights = p.b();
+            for (var right : rights) {
+                var op = right.a();
+                var rightValue = right.b();
+                if (op.equals("*")) {
+                    left *= rightValue;
+                } else {
+                    left /= rightValue;
+                }
+            }
+            return left;
+        });
+    }
+
+    public static JParser<Integer> primary() {
+        /*
+         * primary <- number / "(" expression ")"
+         */
+        return alt(
+                number,
+                seq(
+                        string("("),
+                        seq(
+                            lazy(() -> expression()),
+                            string(")")
+                        )
+                ).map(p -> p.b().a())
+        );
+    }
+    
+    // number <- [0-9]+
+    private static JParser<Integer> number = regex("[0-9]+").map(Integer::parseInt);
+}
+```
+
+表記は冗長なもののほぼPEGに一対一に対応しているのがわかるのではないでしょうか？
+
+これに対してJUnitを使って以下のようなテストコードを記述してみます。無事、意図通りに解釈されていることがわかります。
+
+```java
+assertEquals(new Result<>(7, ""), expression().parse("1+2*3")); // テストをパス
+```
+
+DSLに向いたScalaに比べれば大幅に冗長になったものの、手書きで再帰下降パーザを組み立てるのに比べると大幅に簡潔な記述を実現することができました。しかも、JComb全体を通しても500行にすら満たないのは特筆すべきところです。Javaがユーザ定義の中置演算子をサポートしていればもっと簡潔にできたのですが、そこは向き不向きといったところでしょうか。
+
+### 6.9 まとめ
+
+パーザコンビネータを使うと、手書きでパーザを書いたり、あるいは、対象言語に構文解析器生成系がないようなケースでも、比較的気軽にパーザを組み立てるためのDSL（Domain Specific Language）を定義できるのです。また、それだけでなく、特にJavaのような静的型付き言語を使った場合ですが、IDEによる支援も受けられますし、BNFやPEGにはない便利な演算子を自分で導入することもできます。
+
+パーザコンビネータはお手軽なだけあって各種プログラミング言語に実装されています。たとえば、Java用なら[jparsec](https://github.com/jparsec/jparsec)があります。しかし、筆者としては、パーザコンビネータが動作する仕組みを理解するために、是非とも**自分だけの**パーザコンビネータを実装してみてほしいと思います。
