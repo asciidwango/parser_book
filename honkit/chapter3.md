@@ -1,418 +1,1820 @@
-# 第3章 文脈自由文法の世界
+# 3. JSONの構文解析
 
-第3章では、JSONの構文解析器を記述することを通して、基本的な構文解析の方法を学びました。また、構文解析器についても、PEG型の構文解析器および字句解析器を使った二通りを作ってみることで、構文解析器といっても色々な書き方があるのがわかってもらえたのではないかと思います。
+2章で構文解析に必要な基本概念について学ぶことができました。この章ではJSONという実際に使われている言語を題材に、より実践的な構文解析のやり方を学んでいきます。
 
-この第4章では、現代の構文解析を語る上で必須である、文脈自由文法という概念について学ぶことにします。「文脈自由文法」というと、一見、堅くて難しそうな印象を持つ方も多いかもしれません。しかし、一言で言ってしまえば、BNFをよりシンプルに、数学的に厳密にしただけのものであって、厳しい言葉から漂う程難解な概念ではありません。一方で、「文脈自由文法」という概念を習得することによるメリットは計り知れないものがあります。たとえば、それによって、正規表現で記述出来ないが文脈自由言語（BNFと表現力では等価）で記述出来る「言語」を知ることが出来ますし、文脈自由言語では記述不可能な「言語」について知ることも出来ます。
+## 3.1 JSON（JavaScript Object Notation）の概要
 
-さて、文脈自由文法の世界に飛び込んで見ましょう。
+JSONは、WebサービスにアクセスするためのAPIで非常に一般的に使われているデータフォーマットです。また、企業内サービス間で連携するときにも非常によく使われます。皆さんは何らかの形でJSONに触れたことがあるのではないかと思います。
 
-## 3.1 BNFと文脈自由文法
+JSONは元々は、JavaScriptのサブセットとして、オブジェクトに関する部分だけを切り出したものでしたが、現在はECMAで標準化されており、色々な言語でJSONを扱うライブラリがあります。また、JSONはデータ交換用フォーマットの中でも非常にシンプルであるという特徴があり、そのシンプルさ故か、同じ言語でもJSONを扱うライブラリが乱立する程です。また、今のWebアプリケーション開発に携わる開発者にとってJSONは避けて通れないといってよいでしょう。
+ 
+ 以降では簡単なJSONのサンプルを通してJSONの概要を説明します。
 
-文脈自由文法の定義を大上段に示しても抽象的過ぎますので、皆様に馴染みがあるBNFを文脈自由文法を用いた記述に変換することで、文脈自由文法についての理解のとっかかりとしたいと思います。お題は、「カッコの釣り合いがとれた文字列が任意個続いたもの」です。
+### 3.1.1 オブジェクト
 
-たとえば、
+以下は、二つの名前/値のペアからなる**オブジェクト**です。
 
-```
-()
-(())
-(()())
-()()()
-```
-
-は釣り合いの取れた文字列の例です。一方で、
-
-```
-)(
-(()
-())
+```js
+{
+  "name" : "Kota Mizushima",
+  "age": 41
+}
 ```
 
-は釣り合いの取れていない文字列の例です。このような言語をDyck（ディック）言語と呼び、文脈自由文法を特徴づける言語とされています。
+このJSONは、`name`という名前と、`"Kota Mizushima"`という文字列の**ペア**と、`age`という名前と`41`という値のペアからなる**オブジェクト**であることを示しています。
 
-Dyck言語の文法を擬似BNFで記述してみると以下のようになります。
+なお、用語については、ECMA-404の仕様書に記載されているものに準拠しています。名前/値のペアは、属性やプロパティを呼ばれることもあるので、適宜読み替えてください。
 
-```text
-D = P
-P = "(" P ")" P | ""
+日本語で表現すると、このオブジェクトは、名前が`Kota Mizushima`、年齢が`41`という人物一人分のデータを表していると考えることができます。オブジェクトは、`{}`で囲まれた、`name:value`の対が`,`を区切り文字として続く形になります。後述しますが、`name`の部分は**文字列**である必要があります。
+
+### 3.1.2 配列
+
+別の例として、以下のJSONを見てみます。
+
+```js
+{
+  "kind":"Rectangle",
+  "points": [
+    {"x":0, "y":0},
+    {"x":0, "y":100},
+    {"x":100, "y":100},
+    {"x":100, "y":0},
+  ]
+}
 ```
 
-`D`が構文解析の際に最初に参照される記号です。このBNFを文脈自由文法による記述になおしていきましょう。
+このJSONは、
+ 
+- `"kind":"Rectangle"`のペア
+- `"points":[...]`のペア
 
-最初に、外側にある"|"を消去します。結果として以下のようになります。
+からなるオブジェクトです。さらに、`"point"`に対応する値が**配列**になっていて、その中に以下の4つの要素が含まれています。
+ 
+- 名前が`"x"`で値が`0`、名前が`"y"`で値が`0`のペアからなるオブジェクト
+- 名前が`"x"`で値が`0`、名前が`"y"`で値が`100`のペアからなるオブジェクト
+- 名前が`"x"`で値が`100`、名前が`"y"`で値が`100`のペアからなるオブジェクト
+- 名前が`"x"`で値が`100`、名前が`"y"`で値が`0`のペアからなるオブジェクト
 
-```text
-D = P
-P = "(" P ")" P
-P =  ""
+配列は、`[]`で囲まれた要素の並びで、区切り文字は`,`です。
+
+このオブジェクトは、種類が四角形で、それを構成する点が`(0, 0), (0, 100), (100, 100), (100, 0)`からなっているデータを表現しているとみることができます。
+ 
+### 3.1.3 数値
+
+これまで見てきたオブジェクトと配列は複合的なデータでしたが、既に出てきているように、JSONにはこれ以上分解できないデータもあります。先ほどから出てきている数値もそうです。数値は、
+
+```js
+1
+10
+100
+1000
+1.0
+1.5
 ```
 
-同じ名前`P`を持つ記号が二つ出てきてしまいましたね。文脈自由文法の標準的な表記法では、同じ名前の規則が複数出てきても構いません。その場合の解釈は、BNFで同名の規則を"|"でくくった場合とほぼ同じです。
+のような形になっており、整数または小数です。JSONでの数値の解釈は特に規定されていない点に注意してください。たとえば、`0.1`は2進法での小数だと解釈しても良いですし、10進法での小数と解釈しても構いません。つまり、特に、IEEEの浮動小数点数である、といった規定はありません。
 
-次に"="を"→"に置き換えます。
+### 3.1.4 文字列
 
-```text
-D → P
-P → "(" P ")" P
-P → ""
+JSONのデータには文字列もあります。
+
+```js
+"Hello, World"
+"Kota Mizushima"
+"hogehoge"
 ```
 
-空文字列は`ε`で表現されるのでこれも置き換えます。
+のように、`""`で囲まれたのものが文字列となります。オブジェクトのキーになれるのは文字列のみです。たとえば、以下は**JavaScriptの**オブジェクトとしては正しいですが、**JSON**のオブジェクトとしては正しくありません。
 
-```text
-D → P
-P → "(" P ")" P
-P → ε
+```js
+{
+  name:"Kota Mizushima", //nameが"で囲まれていない！
+  age:36
+}
 ```
 
-文字を表すときの`"`も使わないのでこれも消去します。
+このような誤ったJSONは、他言語のJSONライブラリではエラーになりますが、JavaScriptのオブジェクトリテラルの一部として書いてもエラーにならないので、注意してください。
 
-$$
-\begin{align*}
-D & → P \\
-P & → ( P ) P \\
-P & → ε \\
-\end{align*}
-$$
+### 3.1.5 真偽値
 
-このようにして変換して出来た文脈自由文法ですが、この中で、
+JSONには、多くのプログラミング言語にある真偽値もあります。JSONの真偽値は以下のように、`true`または`false`の二通りです。
 
-$$
-D \rightarrow P
-$$
-
-のような、$\rightarrow$で区切られた右と左をあわせたものを**生成規則**と呼びます。$D$や$P$を**非終端記号**と呼び、$($は**終端記号**と呼びます。このようにして見ていくと、文脈自由文法とは、
-
-- 生成規則の1個以上の並び
-
-からなっており、生成規則は、
-
-- 左辺：1個の非終端記号
-- 右辺：1個以上の終端記号または非終端記号の並び
-
-からなっていることがわかります。改めて、Dyck言語のBNFによる表現と文脈自由文法による表現を見てみることにします。
-
-まず、BNFによる表現です。
-
-```text
-D = P
-P = "(" P ")" S | ""
+```js
+true
+false
 ```
 
-次に、文脈自由文法で表現したものです。
+真偽値も解釈方法は定められていませんが、ほとんどのプログラミング言語で、該当するリテラル表現があるので、他の言語で取り扱う時は、おおむねそのよな真偽値リテラルにマッピングされます。
 
-$$
-\begin{align*}
-D & \rightarrow P \\
-P & \rightarrow ( P ) P \\
-P & \rightarrow \epsilon
-\end{align*}
-$$
+### 3.1.6 null
 
-多少冗長になりましたが、大きくは変わらないことがわかると思います。実質的に、BNFは文脈自由文法の表記法の1つとも言えますから、本質的に両者の能力に差はありません。
+多くのプログラミング言語にある要素ですが、JSONには`null`を含むことができます。多くのプログラミング言語のJSONライブラリでは、無効値に相当する値にマッピングされますが、JSONの仕様では`null`の解釈は定められていません。`null`に相当するリテラルがあればそれにマッピングされる事も多いですが、`Option`や`Maybe`といったデータ型によって`null`を表現する言語では、そのようなデータ型にマッピングされる事が多いようです。
 
-では何故、BNFという表記法でなく文脈自由文法の標準的な表記法に変換するかといえば、4章以降で示す種々の構文解析アルゴリズムの多くが、文脈自由文法をベースに構築されているからです。
+### 3.1.7 JSONの全体像
 
-構文解析を語る上で書かせない、構文木という概念を説明するためにも、文脈自由文法という概念は重要になります。以降の節では、Dyck言語を表現した文脈自由文法を元に、構文解析の基礎をなす様々な概念について説明していきます。
+ここまでで、JSONで現れる6つの要素について説明しましたが、JSONで使える要素は**これだけ**です。このシンプルさが、多くのプログラミング言語でJSONが使われる要因でもあるのでしょう。JSONで使える要素について改めて並べてみます。
 
-## 3.2 文脈自由文法と言語
+- オブジェクト
+- 配列
+- 数値
+- 文字列
+- 真偽値
+- `null`
 
-前の節で定義したDyckの定義は以下のようなものでした。
+次の節では、このJSONの**文法**が、どのような形で表現できるかについて見ていきます。
 
-$$
-\begin{align*}
-D & \rightarrow P \\
-P & \rightarrow ( P ) P \\
-P & \rightarrow \epsilon
-\end{align*}
-$$
+## 3.2 JSONのBNF
 
-これまでは「言語」という用語を明確な定義なしに使っていました。「言語」という言葉を一般的な文脈で使ったときに多くの人が思い浮かべるのは、日本語や英語、フランス語、などの**自然言語**でしょう。
+前の節でJSONの概要について説明し終わったところで、いよいよJSONの文法について見ていきます。JSONの文法はECMA-404の仕様書に記載されていますが、ここでは、BNFで表現されたJSONの文法を見ていきます。
 
-しかし、この書籍で扱う**言語**は、プログラミング言語のような**曖昧さ**を持たないものです。たとえば、JavaやRuby、Pythonといったプログラミング言語の文法には曖昧さがなく、同じテキストは常に同じプログラムを意味します。
+JSONのBNFによる定義は以下で全てです。
 
-では、たとえば、Java言語といったときに、**言語**が指すものは何なのでしょうか？文脈自由文法のような形式文法の世界では、**言語**を**文字列の集合**として取り扱います。
+```bnf
+json = object;
+object = LBRACE RBRACE | LBRACE pair {COMMA pair} RBRACE;
+pair = STRING COLON value;
+array = LBRACKET RBRACKET | LBRACKET value {COMMA value} RBRACKET ;
+value = STRING | NUMBER | object | array | TRUE | FALSE | NULL ;
 
-これでは抽象的ですね。たとえば、以下のHello, World!プログラムは、Java言語のプログラムですが、文字列として見ることもできます。
+STRING = ("\"\"" / "\"" CHAR+ "\"") S;
+NUMBER = (INT FRAC EXP | INT EXP | INT FRAC | INT) S;
+TRUE = "true" S ;
+FALSE = "false" S;
+NULL = "null" S;
+COMMA = "," S;
+COLON = ":" S;
+LBRACE = "{" S;
+RBRACE = "}" S;
+LBRACKET = "[" S;
+RBRACKET = "]" S;
+
+S = ( [ \f\t\r\n]+
+  | "/*" (!"*/" _)* "*/"
+    / "//" (![\r\n] _)* [\r\n]
+    )* ;
+
+CHAR = (!(["\\]) _) | "\\" [\\"/bfnrt] | "u" HEX HEX HEX HEX ;
+HEX = `[0-9a-fA-F]` ;
+INT = ["-"] (`[1-9]` {`[0-9]`} / "0") ;
+FRAC = "." [0-9]+ ;
+EXP = e `[0-9]` {`[0-9]`} ;
+E = "e+" | "e-" | "E+" | "E-" | "e" | "E" ;
+```
+
+これまで説明したJSONの要素と比較して見慣れない記号が出てきましたが、一つ一つ見て行きましょう。
+
+### 3.2.1 json
+
+一番上から読んでいきます。2章の復習になりますが、BNFでは、
+
+ ```
+json = object;
+ ```
+ 
+のような**規則**の集まりによって、文法を表現します。`=`の左側である`json`が**規則名**で、右側（ここでは `object`）が**本体**とになります。さらに、本体の中に出てくる、他の規則を参照する部分（ここでは`object`)を非終端記号と呼びます。非終端記号は同じBNFで定義されている規則名と一致する必要があります。
+  
+この規則を日本語で表現すると、「`json`という名前の規則は、`object`という非終端記号を参照している」と読むことができます。また、`object`は、JSONのオブジェクトを表しているので、jsonという規則は全体で一つのオブジェクトを表しているということになります。
+
+### 3.2.2 object
+
+`object`はJSONのオブジェクトを表す規則で、定義は以下のようになっています。
+
+```
+object = LBRACE RBRACE | LBRACE pair {COMMA pair} RBRACE;
+```
+
+`pair`の定義はのちほど出てきますので心配しないでください。
+
+この規則によって`object`は
+
+- ブレースで囲まれたもの（`LBRACE RBRACE`)である
+  - `LBRACE`はLeft-Brace（開き波カッコ）の略で`{`を示しています
+  - `RBACE`はRight-Brace（閉じ波カッコ）の略で`}`を示しています
+- `LBRACE`が来た後に、`pair`が1回出現して、さらにその後に、`COMMA`（カンマ）を区切り文字として `pair` が1回以上繰り返して出現した後、`RBRACE`が来る
+
+のどちらかであることを表しています。
+
+具体的なJSONを当てはめてみましょう。以下のJSONは`LBRACE RBRACE`にマッチします。
+
+```js
+{}
+```
+
+以下のJSONは`LBRACE {pair {COMMA pair} RBRACE`にマッチします。
+
+```js
+{"x":1}
+{"x":1,"y":2}
+{"x":1,"y":2,"z":3}
+```
+
+しかし、以下のテキストは、`object`に当てはまらず、エラーになります。これは、規則の中を見ると、カンマ（`COMMA`）は区切り文字であるためです。
+
+```js
+{"x":1,} // ,で終わっている
+```
+
+### 3.2.3 pair
+
+`pair`（ペア）は、JSONのオブジェクト内での`"x":1`に当たる部分を表現する規則です。`value`の定義については後述します。
+
+```bnf
+pair = STRING COLON value;
+```
+
+これによってペアは`:`（`COLON`）の前に文字列リテラル（`STRING`)が来て、その後にJSONの値（`value`）が来ることを表しています。`pair`にマッチするテキストとしては、
+
+```
+"x":1
+"y":true
+```
+
+などがあります。一方で、以下のテキストは`pair`にマッチしません。JavaScriptのオブジェクトとJSONが違う点です。
+
+```
+x:1 // 文字列リテラルでないといけない
+```
+
+### 3.2.4 COMMA
+
+`COMMA`は、カンマを表す規則です。カンマそのものを表すには、単に`","`と書けばいいのですが、任意個の空白文字が続くことを表現したいため、規則`S`（後述）を参照しています。
+
+```bnf
+COMMA = "," S;
+```
+
+### 3.2.5 array
+
+`array`は、JSONの値の配列を表す規則です。
+
+```bnf
+array = LBRACKET RBRACKET | LBRACKET value {COMMA value} RBRACKET ;
+```
+
+`LBRACKET`は開き大カッコ（`[`）を、`RBRACKET`は閉じ大カッコ（`]`)を表しています。`value`の定義については後述します。
+
+これによって`array`は、
+
+- 大カッコで囲まれたもの（`LBRACKET RBRACET`)である
+- 開き大カッコ（`LBRACKET`）が来た後に、`value`が1回あらわれて、さらにその後に、`COMMA`を区切り文字として `value` が1回以上繰り返してあらわれた後、閉じ大カッコが来る（`RBRACKET`)
+
+のどちらかであることを表しています。よく見ると、先程の`object`と同様の構造を持っていることがわかります。
+
+`array`についても具体的なJSONを当てはめてみましょう。以下のJSONは`LBRACKET RBRACKET`にマッチします。
+
+```js
+[]
+```
+
+また、以下のJSONは`LBRACKET value {COMMA value} RBRACKET`にマッチします。
+
+```js
+[1]
+[1, 2]
+[1, 2, 3]
+["foo"]
+```
+
+しかし、以下のテキストは、`array`に当てはまらず、エラーになります。`{COMMA pair}`とあるように、カンマは必ず後ろにペアを必要とするからです。
+
+```js
+[1,] // ,で終わっている
+```
+
+### 3.2.6 value
+
+```bnf
+value = STRING | NUMBER | object | array | TRUE | FALSE | NULL ;
+```
+
+`value`はJSONの値を表現する規則です。これは、JSONの値は、
+
+- 文字列（`STRING`)
+- 数値（`NUMBER`)
+- オブジェクト（`object`）
+- 配列（`array`）
+- 真（`TRUE`）
+- 偽（`FALSE`）
+- ヌル（`NULL`）
+
+　のいずれかでなければいけない事を示しています。JSONを普段使っている皆さんにはお馴染みでしょう。
+
+### 3.2.7 STRING
+
+`STRING`は文字列リテラルを表す規則です。
+
+```bnf
+STRING = ("\"\"" / "\"" CHAR+ "\"") S;
+```
+
+`"`で始まって、文字が任意個続いて、 `"` で終わります。`COMMA`と同じように、空白読み飛ばしのために`S`を付けています。`CHAR`の定義は難しくないのですが、煩雑になるため省略します。
+
+### 3.2.8 NUMBER
+
+`NUMBER`は、数値リテラルを表す規則です。
+
+```bnf
+NUMBER = (INT FRAC EXP | INT EXP | INT FRAC | INT) S;
+```
+
+- 整数（`INT`）に続いて、小数部（`FRAC`)と指数部（`EXP`)が来る
+- 整数（`INT`）に続いて、指数部（`EXP`)が来る
+- 整数（`INT`）
+
+のいずれかが`NUMBER`であるという事を表現しています。同様に、空白読み飛ばしのために、`S`を付けています。
+
+### 3.2.9 TRUE
+
+`TRUE`は、真を表すリテラルを表す規則です。
+
+```bnf
+TRUE = "true" S ;
+```
+
+文字列 `true` が真を表すということでそのままですね。
+
+### 3.2.10 FALSE
+
+`FALSE`は、偽を表すリテラルを表す規則です。構造的には、`TRUE`と同じです。
+
+```bnf
+FALSE = "true" S ;
+```
+
+文字列 `false` が偽を表すということでそのままです。
+
+### 3.2.11 NULL
+
+`NULL`は、ヌルリテラルを表す規則です。構造的には、`TRUE`や`FALSE`と同じです。
+
+```bnf
+NULL = "null" S;
+```
+
+`NULL`は、ヌル値があるプログラミング言語だと、その値にマッピングされますが、ここではあくまでヌル値は`null`で表されることしか言っておらず、**意味は特に規定していない**ことに注意してください。
+
+### 3.2.12 JSONのBNFまとめ
+
+JSONのBNFは、非常に少数の規則だけで表現することができます。読者の中には、あまりにも簡潔過ぎて驚かれた方もいるのではないでしょうか。しかし、これだけ単純であるにも関わらず、JSONのBNFは**再帰的に定義されている**ため、非常に複雑な構造も表現することができます。たとえば、
+
+- 配列の要素がオブジェクトであり、その中のキー`"a"`に対応する要素の中にさらに配列があって、その配列は空配列である
+
+といったことも、JSONのBNFでは表現することができます。この、再帰的な規則というのは、構文解析において非常に重要な要素なので、これから本書を読み進める上でも念頭に置いてください。
+
+## 3.3 JSONの構文解析器
+
+JSONの定義と、文法について見てきました。この節では、BNFを元に、JSONを**構文解析**するプログラムを考えてみます。とりあえずは、以下のようなインタフェース`JsonParser`インタフェースを実装したクラスを「JSONの構文解析器」と考えることにします。
 
 ```java
-public class HW { 
-    public static void main(String[] args) { 
-        System.out.println("Hello, World!"); 
+package parser;
+interface JsonParser {
+    public ParseResult<JsonAst.JsonValue> parse(String input);
+}
+```
+
+クラス`ParseResult<T>`は以下のようなジェネリックなクラスになっています。`value`は解析結果の値です。これは任意の型をとり得るので、`T`としています。また、`input`は「構文解析の対象となる文字列」を表します。
+
+```java
+public record ParseResult<T>(T value, String input) {}
+```
+
+インタフェース`JsonParser`は`parse()`メソッドだけを持ちます。`parse()`メソッドは、文字列`input`を受け取り、`ParseResult<JsonAst.JsonValue>`型を返します。デザインパターンの中でも`Composite`パターンを使ったものですが、オブジェクト指向言語で、再帰的な木構造を表す時には`Composite`は定番のパターンです。
+
+```java
+public interface JsonAst {
+    // value
+    sealed interface JsonValue permits 
+        JsonNull, JsonTrue, JsonFalse, 
+        JsonNumber, JsonString, 
+        JsonObject, JsonArray {}
+    
+    // NULL
+    record JsonNull() implements JsonValue {
+        @Override
+        public String toString() {
+            return "null";
+        }
+    }
+
+    // TRUE
+    record JsonTrue() implements JsonValue {
+        @Override
+        public String toString() {
+            return "true";
+        }
+    }
+    
+    // FALSE
+    record JsonFalse() implements JsonValue {
+        @Override
+        public String toString() {
+            return "false";
+        }
+    }
+    
+    // NUMBER
+    record JsonNumber(double value) implements JsonValue {
+        @Override
+        public String toString() {
+            return "JsonNumber(" + value + '}';
+        }
+    }
+    
+    // STRING
+    record JsonString(String value) implements JsonValue {
+        @Override
+        public String toString() {
+            return "JsonString(\"" + value + "\")";
+        }
+    }
+    
+    // object
+    record JsonObject(List<Pair<JsonString, JsonValue>> properties) 
+        implements JsonValue {
+        @Override
+        public String toString() {
+            return "JsonObject{" + properties + '}';
+        }
+    }
+    
+    // array
+    record JsonArray(List<JsonValue> elements) 
+        implements JsonValue {
+        @Override
+        public String toString() {
+            return "JsonArray[" + elements + ']';
+        }
     }
 }
 ```
 
-3を表示するだけのプログラムも考えてみます。一番単純な形は以下のようになるでしょう。
+各クラスがBNFの規則名に対応しているのがわかるでしょうか。次の節では、各規則に対応するメソッドを実装することを通して、実際にJSONの構文解析器を組み上げていきます。
+
+### 3.3.1 構文解析器の全体像
+
+これから、JSONの構文解析器、つまり、JSONを表す文字列を受け取って、それに対応する上記の`JsonAst.JsonValue`型の値を返すメソッドを実装していくわけですが、先に構文解析器を表現するクラスの全体像を示しておきます。
 
 ```java
-public class P3 { 
-    public static void main(String[] args) { 
-        System.out.println(3); 
+package parser;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class PegJsonParser implements JsonParser {
+    private int cursor;
+    private String input;
+
+    private int progressiveCursor;
+    private ParseException progressiveException;
+
+    private static class ParseException extends RuntimeException {
+        public ParseException(String message) {
+            super(message);
+        }
+    }
+
+    public ParseResult<JsonAst.JsonValue> parse(String input) {
+        this.input = input;
+        this.cursor = 0;
+        try {
+            var value = parseValue();
+            return new ParseResult<>(value, input.substring(this.cursor));
+        } catch (ParseException e) {
+            throw progressiveException;
+        }
+    }
+
+    private void recognize(String literal) {
+        if(input.substring(cursor).startsWith(literal)) {
+            cursor += literal.length();
+        } else {
+            String substring = input.substring(cursor);
+            int endIndex = cursor + (literal.length() > substring.length() ? substring.length() : literal.length());
+            throwParseException("expected: " + literal + ", actual: " + input.substring(cursor, endIndex));
+        }
+    }
+
+    private boolean isHexChar(char ch) {
+        return ('0' <= ch && ch <= '9') || ('a' <= ch && ch <= 'z') || ('A' <= ch && ch <= 'Z');
+    }
+
+    private void skipWhitespace() {
+        OUTER:
+        while(cursor < input.length()) {
+            char currentCharacter = input.charAt(cursor);
+            switch (currentCharacter) {
+                case '\f':
+                case '\t':
+                case '\r':
+                case '\n':
+                case '\b':
+                case ' ':
+                    cursor++;
+                    continue OUTER;
+                default:
+                    break OUTER;
+            }
+        }
+    }
+
+    private JsonAst.JsonValue parseValue() {
+        int backup = cursor;
+        try {
+            return parseString();
+        } catch (ParseException e) {
+            cursor = backup;
+        }
+
+        try {
+            return parseNumber();
+        } catch (ParseException e) {
+            cursor = backup;
+        }
+
+        try {
+            return parseObject();
+        } catch (ParseException e) {
+            cursor = backup;
+        }
+
+        try {
+            return parseArray();
+        } catch (ParseException e) {
+            cursor = backup;
+        }
+
+        try {
+            return parseTrue();
+        } catch (ParseException e) {
+            cursor = backup;
+        }
+
+        try {
+            return parseFalse();
+        } catch (ParseException e) {
+            cursor = backup;
+        }
+
+        return parseNull();
+    }
+
+    private JsonAst.JsonTrue parseTrue() {
+        recognize("true");
+        skipWhitespace();
+        return new JsonAst.JsonTrue();
+    }
+
+    private JsonAst.JsonFalse parseFalse() {
+        recognize("false");
+        skipWhitespace();
+        return new JsonAst.JsonFalse();
+    }
+
+    private JsonAst.JsonNull parseNull() {
+        recognize("null");
+        skipWhitespace();
+        return new JsonAst.JsonNull();
+    }
+
+    private void parseLBrace() {
+        recognize("{");
+        skipWhitespace();
+    }
+
+    private void parseRBrace() {
+        recognize("}");
+        skipWhitespace();
+    }
+
+    private void parseLBracket() {
+        recognize("[");
+        skipWhitespace();
+    }
+
+    private void parseRBracket() {
+        recognize("]");
+        skipWhitespace();
+    }
+
+    private void parseComma() {
+        recognize(",");
+        skipWhitespace();
+    }
+
+    private void parseColon() {
+        recognize(":");
+        skipWhitespace();
+    }
+
+    private JsonAst.JsonString parseString() {
+        if(cursor >= input.length()) {
+            throwParseException("expected: \"" + " actual: EOF");
+        }
+        char ch = input.charAt(cursor);
+        if(ch != '"') {
+            throwParseException("expected: \"" + "actual: " + ch);
+        }
+        cursor++;
+        var builder = new StringBuilder();
+        OUTER:
+        while(cursor < input.length()) {
+            ch = input.charAt(cursor);
+            switch(ch) {
+                case '\\':
+                    cursor++;
+                    if(cursor >= input.length()) break OUTER;
+                    char nextCh = input.charAt(cursor);
+                    cursor++;
+                    switch (nextCh) {
+                        case 'b':
+                            builder.append('\b');
+                            break;
+                        case 'f':
+                            builder.append('\f');
+                            break;
+                        case 'n':
+                            builder.append('\n');
+                            break;
+                        case 'r':
+                            builder.append('\r');
+                            break;
+                        case 't':
+                            builder.append('\t');
+                            break;
+                        case '\\':
+                            builder.append('\\');
+                            break;
+                        case '"':
+                            builder.append('"');
+                            break;
+                        case '/':
+                            builder.append('/');
+                            break;
+                        case 'u':
+                            if(cursor + 4 <= input.length()) {
+                                char[] characters = input.substring(cursor, cursor + 4).toCharArray();
+                                for(char character:characters) {
+                                    if(!isHexChar(character)) {
+                                        throwParseException("invalid unicode escape: " + character);
+                                    }
+                                }
+                                char result = (char)Integer.parseInt(new String(characters), 16);
+                                builder.append(result);
+                                cursor += 4;
+                            } else {
+                                throwParseException("invalid unicode escape: " + input.substring(cursor));
+                            }
+                            break;
+                        default:
+                            throwParseException("expected: b|f|n|r|t|\"|\\|/ actual: " + nextCh);
+                    }
+                    break;
+                case '"':
+                    cursor++;
+                    break OUTER;
+                default:
+                    builder.append(ch);
+                    cursor++;
+                    break;
+            }
+        }
+
+        if(ch != '"') {
+            throwParseException("expected: " + "\"" + " actual: " + ch);
+        } else {
+            skipWhitespace();
+            return new JsonAst.JsonString(builder.toString());
+        }
+        throw new RuntimeException("never reach here");
+    }
+
+    private void throwParseException(String message) throws ParseException {
+        var exception = new ParseException(message);
+        if(progressiveCursor < cursor) {
+            progressiveCursor = cursor;
+            progressiveException = exception;
+        }
+        throw exception;
+    }
+
+    private JsonAst.JsonNumber parseNumber() {
+        int start = cursor;
+        char ch = 0;
+        while(cursor < input.length()) {
+            ch = input.charAt(cursor);
+            if(!('0' <= ch && ch <= '9')) break;
+            cursor++;
+        }
+        if(start == cursor) {
+            throwParseException("expected: [0-9] actual: " + (ch != 0 ? ch : "EOF"));
+        }
+        return new JsonAst.JsonNumber(Integer.parseInt(input.substring(start, cursor)));
+    }
+
+    private Pair<JsonAst.JsonString, JsonAst.JsonValue> parsePair() {
+        var key = parseString();
+        parseColon();
+        var value = parseValue();
+        return new Pair<>(key, value);
+    }
+
+    private JsonAst.JsonObject parseObject() {
+        int backup = cursor;
+        try {
+            parseLBrace();
+            parseRBrace();
+            return new JsonAst.JsonObject(new ArrayList<>());
+        } catch (ParseException e) {
+            cursor = backup;
+        }
+
+        parseLBrace();
+        List<Pair<JsonAst.JsonString, JsonAst.JsonValue>> members = new ArrayList<>();
+        var member = parsePair();
+        members.add(member);
+        try {
+            while (true) {
+                parseComma();
+                member = parsePair();
+                members.add(member);
+            }
+        } catch (ParseException e) {
+            parseRBrace();
+            return new JsonAst.JsonObject(members);
+        }
+    }
+
+    public JsonAst.JsonArray parseArray() {
+        int backup = cursor;
+        try {
+            parseLBracket();
+            parseRBracket();
+            return new JsonAst.JsonArray(new ArrayList<>());
+        } catch (ParseException e) {
+            cursor = backup;
+        }
+
+        parseLBracket();
+        List<JsonAst.JsonValue> values = new ArrayList<>();
+        var value = parseValue();
+        values.add(value);
+        try {
+            while (true) {
+                parseComma();
+                value = parseValue();
+                values.add(value);
+            }
+        } catch (ParseException e) {
+            parseRBracket();
+            return new JsonAst.JsonArray(values);
+        }
     }
 }
 ```
 
-`3+5`を表示するだけのプログラムは以下のようになるでしょう。
+このクラス`PegJsonParser`で重要なことは、クラスがフィールドとして以下を保持していることです。
 
 ```java
-public class P8 { 
-    public static void main(String[] args) { 
-        System.out.println(3 + 5); 
+public class PegJsonParser implements JsonParser {
+    private int cursor;
+    private String input;
+    private int progressiveCursor;
+    private ParseException progressiveException;
+    // ...
+}
+```
+
+構文解析器を実装する方法としては、同じ入力文字列を与えれば同じ解析結果が返ってくるような関数型の実装方法と、今回のように、現在どこまで読み進めたかによって解析結果が変わる手続き型の方法があるのですが、手続き型の方が説明しやすいので、本書では手続き型の実装方法を採用しています。
+
+`progressive`で始まるフィールドは主にエラーメッセージをわかりやすくするためのものなので、現時点では気にする必要はありません。
+
+### 3.3.2 nullの構文解析メソッド
+
+`null`の構文解析は、次のような　`parseNull()` メソッドとして定義します。
+
+```java
+private JsonAst.JsonNull parseNull() {
+    recognize("null");
+    skipWhitespace();
+    return JsonAst.JsonNull.getInstance();
+}
+
+```
+
+　このメソッドで行っていることを見ていきましょう。このメソッドでは、入力である`input`の現在位置が`"null"`という文字列で始まっているかをチェックします。もしそうなら、**JSONのnull**をあらわす`JsonAst.JsonNull`のインスタンスを返します。もし、先頭が`"null"`でなければ、構文解析は失敗なので例外を発生させますが、これは`recognize()`メソッドの中で行われています。`recognize()`の内部では、入力の現在位置と与えられた文字列を照合して、マッチしない場合例外を投げます。
+
+　次に、`skipWhitespace()`メソッドを呼び出して、「空白の読み飛ばし」を行っています。
+
+　`recognize()`も`skipWhitespace()`も構文解析中に頻出する処理であるため、今回はそれぞれをメソッドにくくりだして、各構文解析メソッドの中で呼び出せるようにしました。
+
+### 3.3.3 trueの構文解析メソッド
+
+`true`の構文解析は、次のような　`parseTrue()` メソッドとして定義します。
+
+```java
+private JsonAst.JsonTrue parseTrue() {
+    recognize("true");
+    skipWhitespace();
+    return JsonAst.JsonTrue.getInstance();
+}
+```
+
+　見ればわかりますが、`parseNull()`とほぼ同じです。固定の文字列を解析するという点で両者はほぼ同じ処理であり、引数を除けば同じ処理になるのです。
+
+### 3.3.4 falseの構文解析メソッド
+
+`false`の構文解析は、次のシグニチャを持つ　`parseFalse()` メソッドとして定義します。
+
+```java
+private JsonAst.JsonFalse parseFalse() {
+    recognize("false");
+    skipWhitespace();
+    return JsonAst.JsonFalse.getInstance();
+}
+```
+
+　これも、`parseNull()`とほぼ同じですので、特に説明の必要はないでしょう。
+
+### 3.3.5 数値の構文解析メソッド
+
+数値の構文解析は、次のシグニチャを持つ　`parseNumber()` メソッドとして定義します。
+
+```java
+    private JsonAst.JsonNumber parseNumber() {
+        int start = cursor;
+        char ch = 0;
+        while(cursor < input.length()) {
+            ch = input.charAt(cursor);
+            if(!('0' <= ch && ch <= '9')) break;
+            cursor++;
+        }
+        if(start == cursor) {
+            throwParseException("expected: [0-9] actual: " + (ch != 0 ? ch : "EOF"));
+        }
+        return new JsonAst.JsonNumber(Integer.parseInt(input.substring(start, cursor))); }
+```
+
+`parseNumber()` では、`while`文において、
+
+- 0から9までの文字が出る間、入力を読む
+- 1桁ずつ、数値に変換する
+
+という処理を行っています。本来なら、JSONの仕様では、小数も扱えるのですが、構文解析にとっては本質的ではないので本書では省略します。
+
+### 3.3.6 文字列の構文解析メソッド
+
+文字列の構文解析は、次のシグニチャを持つ　`parseString()` メソッドとして定義します。
+
+```java
+    private JsonAst.JsonString parseString() {
+        if(cursor >= input.length()) {
+            throwParseException("expected: \"" + " actual: EOF");
+        }
+        char ch = input.charAt(cursor);
+        if(ch != '"') {
+            throwParseException("expected: \"" + "actual: " + ch);
+        }
+        cursor++;
+        var builder = new StringBuilder();
+        OUTER:
+        while(cursor < input.length()) {
+            ch = input.charAt(cursor);
+            switch(ch) {
+                case '\\':
+                    cursor++;
+                    if(cursor >= input.length()) break OUTER;
+                    char nextCh = input.charAt(cursor);
+                    cursor++;
+                    switch (nextCh) {
+                        case 'b':
+                            builder.append('\b');
+                            break;
+                        case 'f':
+                            builder.append('\f');
+                            break;
+                        case 'n':
+                            builder.append('\n');
+                            break;
+                        case 'r':
+                            builder.append('\r');
+                            break;
+                        case 't':
+                            builder.append('\t');
+                            break;
+                        case '\\':
+                            builder.append('\\');
+                            break;
+                        case '"':
+                            builder.append('"');
+                            break;
+                        case '/':
+                            builder.append('/');
+                            break;
+                        case 'u':
+                            if(cursor + 4 <= input.length()) {
+                                char[] characters = input.substring(cursor, cursor + 4).toCharArray();
+                                for(char character:characters) {
+                                    if(!isHexChar(character)) {
+                                        throwParseException("invalid unicode escape: " + character);
+                                    }
+                                }
+                                char result = (char)Integer.parseInt(new String(characters), 16);
+                                builder.append(result);
+                                cursor += 4;
+                            } else {
+                                throwParseException("invalid unicode escape: " + input.substring(cursor));
+                            }
+                            break;
+                        default:
+                            throwParseException("expected: b|f|n|r|t|\"|\\|/ actual: " + nextCh);
+                    }
+                    break;
+                case '"':
+                    cursor++;
+                    break OUTER;
+                default:
+                    builder.append(ch);
+                    cursor++;
+                    break;
+            }
+        }
+
+        if(ch != '"') {
+            throwParseException("expected: " + "\"" + " actual: " + ch);
+        } else {
+            skipWhitespace();
+            return new JsonAst.JsonString(builder.toString());
+        }
+        throw new RuntimeException("never reach here");
+    }
+```
+
+`while`文の中が若干複雑になっていますが、一つ一つ見ていきます。
+
+まず、最初の部分では、
+
+```java
+        if(cursor >= input.length()) {
+            throwParseException("expected: \"" + " actual: EOF");
+        }
+        char ch = input.charAt(cursor);
+        if(ch != '"') {
+            throwParseException("expected: \"" + "actual: " + ch);
+        }
+        cursor++;
+```
+
+- 入力が終端に達していないこと
+- 入力の最初が`"`であること
+
+をチェックしています。文字列は当然ながら、ダブルクォートで始まりますし、文字列リテラルは、最低長さが2あるので、それらの条件が満たされなければ例外が投げられるわけです。
+
+`while`文の中では、最初が
+
+- `\` であるか（エスケープシーケンスか）
+- それ以外か
+
+を`switch`文で判定して分岐しています。JSONで使えるエスケープシーケンスは、
+
+- `b`, `f`, `n`, `t`, `\`, `"`, `/`
+- `uxxxx` （ユニコードエスケープ）
+
+のいずれかに分かれているので、意味を読み取るのは簡単でしょう。
+
+そして、`while`文が終わったあとで、
+
+
+```java
+        if(ch != '"') {
+            throwParseException("expected: " + "\"" + " actual: " + ch);
+        } else {
+            skipWhitespace();
+            return new JsonAst.JsonString(builder.toString());
+        }
+        throw new RuntimeException("never reach here");
+```
+
+というチェックを入れることによって、ダブルクォートで文字列が終端している事を確認した後、空白を読み飛ばしています。
+
+メソッドの末尾で`RuntimeException`を`throw`しているのは、ここに到達することは、構文解析器にバグが無い限りはありえないことを示しています。
+
+### 3.3.7 配列の構文解析メソッド
+
+配列の構文解析は、次のシグニチャを持つ　`parseArray()` メソッドとして定義します。
+
+```java
+    public JsonAst.JsonArray parseArray() {
+        int backup = cursor;
+        try {
+            parseLBracket();
+            parseRBracket();
+            return new JsonAst.JsonArray(new ArrayList<>());
+        } catch (ParseException e) {
+            cursor = backup;
+        }
+
+        parseLBracket();
+        List<JsonAst.JsonValue> values = new ArrayList<>();
+        var value = parseValue();
+        values.add(value);
+        try {
+            while (true) {
+                parseComma();
+                value = parseValue();
+                values.add(value);
+            }
+        } catch (ParseException e) {
+            parseRBracket();
+            return new JsonAst.JsonArray(values);
+        }
+    }
+```
+
+この`parseArray()`は多少複雑になります。まず、先頭に`"["`が来るかチェックする必要があります。これをコードにすると、以下のようになります。
+
+```java
+parseLBracket();
+```
+
+`parseLBracket()`は以下のように定義されています。
+
+```java
+ private void parseLBracket() {
+    recognize("[");
+    skipWhitespace();
+}
+```
+
+`recognize()`で、現在の入力位置が`[`と一致しているかチェックをした後、空白を読み飛ばしています。
+　
+この`recognize()`は、与えられた文字列リテラルが入力先頭とマッチするかをチェックし、マッチするなら入力を前に進めて、マッチしないなら例外を投げます。内部の実装は以下のようになります。
+
+```java
+    private void recognize(String literal) {
+        if(input.substring(cursor).startsWith(literal)) {
+            cursor += literal.length();
+        } else {
+            String substring = input.substring(cursor);
+            int endIndex = cursor + (literal.length() > substring.length() ? substring.length() : literal.length());
+            throwParseException("expected: " + literal + ", actual: " + input.substring(cursor, endIndex));
+        }
+    }
+```
+
+　このようにすることで、マッチしない場合に例外を投げ、そうでなければ入力進めるという挙動を実装できます。`[`の次には任意の`JsonValue`または`"]"`が来る可能性があります。この時、まず最初に、`]`が来ると**仮定**するのがポイントです。
+
+```java
+        int backup = cursor;
+        try {
+            parseLBracket();
+            parseRBracket();
+            return new JsonAst.JsonArray(new ArrayList<>());
+        } catch (ParseException e) {
+            cursor = backup;
+        }
+```
+
+もし、仮定が成り立たなかった場合、`ParseException`がthrowされるはずですから、それをcatchして、バックアップした位置に巻き戻します。
+
+`]`が来るという仮定が成り立たなかった場合、再び最初に`[`が出現して、その次に来るのは任意の`JsonValue`ですから、以下のようなコードになります。
+
+```java
+        parseLBracket();
+        List<JsonAst.JsonValue> values = new ArrayList<>();
+        var value = parseValue();
+        values.add(value);
+```
+
+ローカル変数`values`は、配列の要素を格納するためのものです。
+
+配列の中で、最初の要素が読み込まれた後、次に来るのは、`,`か`]`のどちらかですが、ひとまず、`,`が来ると仮定して`while`ループで
+
+```java
+parseComma();
+value = parseValue();
+values.add(value);
+```
+
+を繰り返します。この繰り返しは、1回ごとに必ず入力を1以上進めるため、必ず失敗します。失敗した時は、テキストが正しいJSONなら、`]`が来るはずなので、
+
+```java
+parseRBracket();
+return new JsonAst.JsonArray(values);
+```
+
+とします。もし、テキストが正しいJSONでない場合、`parseRBracket()`から例外が投げられるはずですが、その例外は**より上位の層が適切にリカバーしてくれると期待して**放置します。JSONのような再帰的な構造を解析する時、このような、「自分の呼び出し元が適切にやってくれるはず」（何故なら、自分はその呼び出し元で適切にcatchしているのだから）という考え方が重要になります。
+
+このように、多少複雑になりましたが、`parseArray()`の定義が、EBNFにおける表記
+
+```bnf
+array = LBRACKET RBRACKET | LBRACKET {value {COMMA value}} RBRACKET ;
+```
+
+に対応していることがわかるでしょうか。読み方のポイントは、`|`の後を、例外をキャッチした後の処理ととらえることです。
+
+### 3.3.8 オブジェクトの構文解析メソッド
+
+オブジェクトの構文解析は、次のシグニチャを持つ　`parseObject()` メソッドとして定義します。
+
+```java
+    private JsonAst.JsonObject parseObject() {
+        int backup = cursor;
+        try {
+            parseLBrace();
+            parseRBrace();
+            return new JsonAst.JsonObject(new ArrayList<>());
+        } catch (ParseException e) {
+            cursor = backup;
+        }
+
+        parseLBrace();
+        List<Pair<JsonAst.JsonString, JsonAst.JsonValue>> members = new ArrayList<>();
+        var member = parsePair();
+        members.add(member);
+        try {
+            while (true) {
+                parseComma();
+                member = parsePair();
+                members.add(member);
+            }
+        } catch (ParseException e) {
+            parseRBrace();
+            return new JsonAst.JsonObject(members);
+        }
+    }
+```
+
+この定義を見て、ひょっとしたら、
+
+「あれ？これ、`parseArray()`とほとんど同じでは」
+
+と気づかれた読者の方が居るかも知れません。実際、`parseObject()`がやっていることは非常に`parseArray()`と非常に類似しています。
+
+まず、最初に、
+
+```java
+parseLBrace();
+parseRBrace();
+return new JsonAst.JsonObject(new ArrayList<>());
+```
+
+としている箇所は、`{}`という形の空オブジェクトを読み取ろうとしていますが、これは、空配列`[]`を読み取るコードとほぼ同じです。
+
+続くコードも、対応する記号が`{}`か`[]`の違いこそあるものの、基本的に同じです。唯一の違いは、オブジェクトの各要素は、`name:value`というペアなため、`parseValue()`の代わりに`parsePair()`を呼び出しているところくらいです。
+
+そして、`parsePair()`は以下のように定義されています。
+
+```java
+    private Pair<JsonAst.JsonString, JsonAst.JsonValue> parsePair() {
+        var key = parseString();
+        parseColon();
+        var value = parseValue();
+        return new Pair<>(key, value);
+    }
+```
+
+　これは、EBNFにおける以下の定義にそのまま対応しているのがわかるでしょう。
+
+```
+pair = STRING COLON value;
+```
+
+### 3.3.9 構文解析における再帰
+
+配列やオブジェクトの構文解析メソッドを見るとわかりますが、
+
+- `parseArray() -> parseValue() -> parseArray()`
+- `parseArray() -> parseValue() -> parseObject()`
+- `parseObject() -> parseValue() -> parseObject()`
+- `parseObject() -> parseValue() -> parseArray()`
+
+のような再帰呼び出しが起こり得ることがわかります。このような再帰呼び出しでは、各ステップで必ず構文解析が1文字以上進むため、JSONがどれだけ深くなっても（スタックが溢れない限り）うまく構文解析ができるのです。
+
+### 3.3.10 構文解析とPEG
+
+ここまででJSONの構文解析器を実装することが出来ましたが、実は、この節で紹介した技法は古典的な構文解析の技法では**ありません**。
+
+この節で解説した技法は、Parsing Expression Grammar(PEG)と呼ばれる手法に基づいています。
+
+PEGは2004にBryan Ford（ブライアン・フォード）によって提案された形式文法であり、従来主流であったCFG(Context-Free Grammar)と違う特徴を持ちますが、プログラミング言語など曖昧性の無い言語の解析に使うのには便利であり、最近では色々な言語でPEGをベースにした構文解析器が実装されています。メジャーな言語だとPythonは3.9からPEGベースの構文解析器に内部実装を切り替えました。
+
+PEGはとてもシンプルなので、先にPEGを使った技法を学ぶことで、構文解析についてスムーズに理解してもらえたのではないかと思います。ただし、従来の構文解析手法（という言い方は不適切で、依然として従来の手法の方がよく使われています）を学ぶのも重要な事ですので、次の節では、従来型の構文解析手法について解説します。
+
+## 3.4 字句解析器を使った構文解析器
+
+前節では、構文解析法の一種であるPEGを取り扱いましたが、通常の構文解析法では、字句解析という前処理を行ってから構文解析を行います。字句解析の字句は英語ではトークン（`token`）と言われるものです。たとえば、以下の英文があったとします。
+
+```
+We are parsers.
+```
+
+我々は構文解析器であるというジョーク的な文ですが、それはさておき、この文は
+
+```
+[We, are, parsers]
+```
+
+という三つのトークン（単語）に分解すると考えるのが字句解析の発想法です。
+
+古典的な構文解析の世界では、字句解析が必須とされていましたが、それは後の章で説明される構文解析アルゴリズムの都合に加えて、空白のスキップという処理を字句解析で行えるからでもあります。
+
+前節で出てきたJSONの構文解析器では`skipWhitespace()`の呼び出しが頻出していましたが、字句解析器を使う場合、空白を読み飛ばす処理を先に行うことで、構文解析器では空白の読み飛ばしという作業をしなくてよくなります。
+
+この点はトレードオフがあって、たとえば、空白に関する規則がある言語の中でブレがある場合には、字句解析という前処理はかえってしない方が良いということすらあります。ともあれ、字句解析という前処理を通すことには一定のメリットがあるのは確かです。
+
+### 3.4.1 字句解析器を使った構文解析器の全体像
+
+この項では、字句解析器を使った構文解析器の全体像を示します。まず最初に、JSONの字句解析器は次のようになります。
+
+```java
+package parser;
+
+public class SimpleJsonTokenizer implements JsonTokenizer {
+    private final String input;
+    private int index;
+    private Token fetched;
+
+    public SimpleJsonTokenizer(String input) {
+        this.input = input;
+        this.index = 0;
+    }
+
+    public String rest() {
+        return input.substring(index);
+    }
+
+    private static boolean isDigit(char ch) {
+        return '0' <= ch && ch <= '9';
+    }
+
+    private boolean tokenizeNumber(boolean positive) {
+        char firstChar = input.charAt(index);
+        if(!isDigit(firstChar)) return false;
+        int result = 0;
+        while(index < input.length()) {
+            char ch = input.charAt(index);
+            if(!isDigit(ch)) {
+                fetched = new Token(Token.Type.INTEGER, positive ? result : -result);
+                return true;
+            }
+            result = result * 10 + (ch - '0');
+            index++;
+        }
+        fetched = new Token(Token.Type.INTEGER, positive ? result : -result);
+        return true;
+    }
+
+    private boolean tokenizeStringLiteral() {
+        char firstChar = input.charAt(index);
+        int beginIndex = index;
+        if(firstChar != '"') return false;
+        index++;
+        var builder = new StringBuffer();
+        while(index < input.length()) {
+            char ch = input.charAt(index);
+            if(ch == '"') {
+                fetched = new Token(Token.Type.STRING, builder.toString());
+                index++;
+                return true;
+            }
+            if(ch == '\\') {
+                index++;
+                if(index >= input.length()) return false;
+                char nextCh = input.charAt(index);
+                switch(nextCh) {
+                    case '\\':
+                        builder.append('\\');
+                        break;
+                    case '"':
+                        builder.append('"');
+                        break;
+                    case '/':
+                        builder.append('/');
+                        break;
+                    case 't':
+                        builder.append('\t');
+                        break;
+                    case 'f':
+                        builder.append('\f');
+                        break;
+                    case 'b':
+                        builder.append('\b');
+                        break;
+                    case 'r':
+                        builder.append('\r');
+                        break;
+                    case 'n':
+                        builder.append('\n');
+                        break;
+                    case 'u':
+                        if((index + 1) + 4 >= input.length()) {
+                            throw new TokenizerException("unicode escape ends with EOF: " + input.substring(index));
+                        }
+                        var unicodeEscape= input.substring(index + 1, index + 1 + 4);
+                        if(!unicodeEscape.matches("[0-9a-fA-F]{4}")) {
+                            throw new TokenizerException("illegal unicode escape: \\u" + unicodeEscape);
+                        }
+                        builder.append((char)Integer.parseInt(unicodeEscape, 16));
+                        index += 4;
+                        break;
+                }
+            } else {
+                builder.append(ch);
+            }
+            index++;
+        }
+        return false;
+    }
+
+    private void accept(String literal, Token.Type type, Object value) {
+        String head = input.substring(index);
+        if(head.indexOf(literal) == 0) {
+            fetched = new Token(type, value);
+            index += literal.length();
+        } else {
+            throw new TokenizerException("expected: " + literal + ", actual: " + head);
+        }
+    }
+
+    @Override
+    public Token current() {
+        return fetched;
+    }
+
+    @Override
+    public boolean moveNext() {
+        LOOP:
+        while(index < input.length()) {
+            char ch = input.charAt(index);
+            switch (ch) {
+                case '[':
+                    accept("[", Token.Type.LBRACKET, "[");
+                    return true;
+                case ']':
+                    accept("]", Token.Type.RBRACKET, "]");
+                    return true;
+                case '{':
+                    accept("{", Token.Type.LBRACE, "{");
+                    return true;
+                case '}':
+                    accept("}", Token.Type.RBRACE, "}");
+                    return true;
+                case '(':
+                    accept("(", Token.Type.LPAREN, "(");
+                    return true;
+                case ')':
+                    accept(")", Token.Type.RPAREN, ")");
+                    return true;
+                case ',':
+                    accept(",", Token.Type.COMMA, ",");
+                    return true;
+                case ':':
+                    accept(":", Token.Type.COLON, ":");
+                    return true;
+                // true
+                case 't':
+                    accept("true", Token.Type.TRUE, true);
+                    return true;
+                // false
+                case 'f':
+                    accept("false", Token.Type.FALSE, false);
+                    return true;
+                case 'n': {
+                    String actual;
+                    if (index + 4 <= input.length()) {
+                        actual = input.substring(index, index + 4);
+                        if (actual.equals("null")) {
+                            fetched = new Token(Token.Type.NULL, null);
+                            index += 4;
+                            return true;
+                        } else {
+                            throw new TokenizerException("expected: null, actual: " + actual);
+                        }
+                    } else {
+                        actual = input.substring(index);
+                        throw new TokenizerException("expected: null, actual: " + actual);
+                    }
+                }
+                case '"':
+                    return tokenizeStringLiteral();
+                // whitespace
+                case ' ':
+                case '\t':
+                case '\n':
+                case '\r':
+                case '\b':
+                case '\f':
+                    char next = 0;
+                    do {
+                        index++;
+                        next = input.charAt(index);
+                    } while (index < input.length() && Character.isWhitespace(next));
+                    continue LOOP;
+                default:
+                    if('0' <= ch && ch <= '9') {
+                        return tokenizeNumber(true);
+                    } else if (ch == '+') {
+                        index++;
+                        return tokenizeNumber(true);
+                    } else if (ch == '-') {
+                        index++;
+                        return tokenizeNumber(false);
+                    } else {
+                        throw new TokenizerException("unexpected character: " + ch);
+                    }
+            }
+        }
+        return false;
     }
 }
 ```
 
-このようにJava言語のプログラムとして認められる文字列を列挙していくと、次のような**文字列の集合**`JP`になります。
+これを利用した構文解析器のコードを示します。
 
-```text
-JP = {
-  public class HW { public static void main(String[] args) { System.out.println("Hello, World!"); }},
-  public class P3 { public static void main(String[] args) { System.out.println(3); }},
-  public class p8 { public static void main(String[] args) { System.out.println(3 + 5); }},
-  ...
+```java
+package parser;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class SimpleJsonParser implements JsonParser {
+    private SimpleJsonTokenizer tokenizer;
+
+    public ParseResult<JsonAst.JsonValue> parse(String input) {
+        tokenizer = new SimpleJsonTokenizer(input);
+        tokenizer.moveNext();
+        var value = parseValue();
+        return new ParseResult<>(value, tokenizer.rest());
+    }
+
+    private JsonAst.JsonValue parseValue() {
+        var token = tokenizer.current();
+        switch(token.type) {
+            case INTEGER:
+                return parseNumber();
+            case STRING:
+                return parseString();
+            case TRUE:
+                return parseTrue();
+            case FALSE:
+                return parseFalse();
+            case NULL:
+                return parseNull();
+            case LBRACKET:
+                return parseArray();
+            case LBRACE:
+                return parseObject();
+        }
+        throw new RuntimeException("cannot reach here");
+    }
+
+    private JsonAst.JsonTrue parseTrue() {
+        if(!tokenizer.current().equals(true)) {
+            return JsonAst.JsonTrue.getInstance();
+        }
+        throw new parser.ParseException("expected: true, actual: " + tokenizer.current().value);
+    }
+
+    private JsonAst.JsonFalse parseFalse() {
+        if(!tokenizer.current().equals(false)) {
+            return JsonAst.JsonFalse.getInstance();
+        }
+        throw new parser.ParseException("expected: false, actual: " + tokenizer.current().value);
+    }
+
+    private JsonAst.JsonNull parseNull() {
+        if(tokenizer.current().value == null) {
+            return JsonAst.JsonNull.getInstance();
+        }
+        throw new parser.ParseException("expected: null, actual: " + tokenizer.current().value);
+    }
+
+    private JsonAst.JsonString parseString() {
+        return new JsonAst.JsonString((String)tokenizer.current().value);
+    }
+
+    private JsonAst.JsonNumber parseNumber() {
+        var value = (Integer)tokenizer.current().value;
+        return new JsonAst.JsonNumber(value);
+    }
+
+    private Pair<JsonAst.JsonString, JsonAst.JsonValue> parsePair() {
+        var key = parseString();
+        tokenizer.moveNext();
+        if(tokenizer.current().type != Token.Type.COLON) {
+            throw new parser.ParseException("expected: `:`, actual: " + tokenizer.current().value);
+        }
+        tokenizer.moveNext();
+        var value = parseValue();
+        return new Pair<>(key, value);
+    }
+
+    private JsonAst.JsonObject parseObject() {
+        if(tokenizer.current().type != Token.Type.LBRACE) {
+            throw new parser.ParseException("expected `{`, actual: " + tokenizer.current().value);
+        }
+
+        tokenizer.moveNext();
+        if(tokenizer.current().type == Token.Type.RBRACE) {
+            return new JsonAst.JsonObject(new ArrayList<>());
+        }
+
+        List<Pair<JsonAst.JsonString, JsonAst.JsonValue>> members = new ArrayList<>();
+        var pair= parsePair();
+        members.add(pair);
+
+        while(tokenizer.moveNext()) {
+            if(tokenizer.current().type == Token.Type.RBRACE) {
+                return new JsonAst.JsonObject(members);
+            }
+            if(tokenizer.current().type != Token.Type.COMMA) {
+                throw new parser.ParseException("expected: `,`, actual: " + tokenizer.current().value);
+            }
+            tokenizer.moveNext();
+            pair = parsePair();
+            members.add(pair);
+        }
+
+        throw new parser.ParseException("unexpected EOF");
+    }
+
+    private JsonAst.JsonArray parseArray() {
+        if(tokenizer.current().type != Token.Type.LBRACKET) {
+            throw new parser.ParseException("expected: `[`, actual: " + tokenizer.current().value);
+        }
+
+        tokenizer.moveNext();
+        if(tokenizer.current().type == Token.Type.RBRACKET) {
+            return new JsonAst.JsonArray(new ArrayList<>());
+        }
+
+        List<JsonAst.JsonValue> values = new ArrayList<>();
+        var value = parseValue();
+        values.add(value);
+
+        while(tokenizer.moveNext()) {
+            if(tokenizer.current().type == Token.Type.RBRACKET) {
+                return new JsonAst.JsonArray(values);
+            }
+            if(tokenizer.current().type != Token.Type.COMMA) {
+                throw new parser.ParseException("expected: `,`, actual: " + tokenizer.current().value);
+            }
+            tokenizer.moveNext();
+            value = parseValue();
+            values.add(value);
+        }
+
+        throw new ParseException("unexpected EOF");
+    }
 }
 ```
 
-Java言語のプログラムとして認められる文字列は無数にありますから、集合`JP`の要素は無限個あります。つまり、`JP`は**無限集合**になります。
+構文解析器から呼び出されている`parserXXX()`メソッドを見るとわかりますが、字句解析器を導入したことによって、文字列の代わりにトークンの列を順によみ込んで、期待通りのトークンが現れたかを事前にチェックしています。また、この構文解析器には空白の読み飛ばしに関する処理が入っていないことに着目してください。
 
-同様にRubyを「言語」として見ると次のようになります。
+、PEG版と異なり、途中で失敗したら後戻り（バックトラック）するという処理も存在しません。後戻りによって、文法の柔軟性を増すというメリットがある一方、構文解析器の速度が落ちるというデメリットもあるため、字句解析器を用いた構文解析器は一般により高速に動作します（ただし、実装者の力量の影響も大きいです）。
 
-```text
-RB = {
-  puts 'Hello, World!',
-  puts 1,
-  puts 2,
-  ...
-}
+### 3.4.2 JSONの字句解析器
+
+3.4.1で触れたJSONの字句解析器について、この項では、主要な部分に着目して説明します。
+
+#### 3.4.2.1 ヘッダ部
+
+まず、JSONの字句解析器を実装したクラスである`SimpleJsonTokenizer`の先頭（ヘッダ）部分を読んでみます。
+
+```java
+public class SimpleJsonTokenizer implements JsonTokenizer {
+    private final String input;
+    private int index;
+    private Token fetched;
+
+    public SimpleJsonTokenizer(String input) {
+        this.input = input;
+        this.index = 0;
+    }
 ```
 
-Rubyプログラムとして認められる文字列は無数にあるので、`RB`もやはり無限集合となります。
+`String`型のフィールド`input`は、トークンに切り出す元となる文字列を表します。`int`型のフィールド`index`は、今、字句解析器が文字列の何番目を読んでいるかを表すフィールドで0オリジンです。`Token`型のフィールド`fetched`には、字句解析器が切り出したトークンが保存されます。
 
-このように、形式言語の世界では文字列の集合を言語としてとらえるわけです。
+コンストラクタ中では、入力文字列`input`を受け取り、フィールドに格納および、`index`を0に初期化しています。
 
-例をDyck言語に戻します。Dyck言語が表す文字列の集合が一体何なのかを考えてみます。Dyck言語とは「括弧の釣り合いが取れた文字列」を表すものでした。ということは、括弧の釣り合いが取れた文字列を要素に持つ集合を考えればいいことになります。
+#### 3.4.2.2 本体部
 
-```text
-DK = {
-  (),
-  (()),
-  ((())),
-  (()()),
-  ()(),
-  ()()(),
-  ...
-}
+`SimpleTokenizer`の主要なメソッドは、
+
+- `tokenizeNumber()`
+- `tokenizeStringLiteral()`
+- `accept()`
+- `moveNext()`
+- `current()`
+
+#### 3.4.2.2.1 tokenizeNumber
+
+`tokenizeNumber()`メソッドは、文字列の現在位置から開始して、数値トークンを切り出すためのメソッドです。引数`positive`の値が`true`なら、正の整数を、`false`なら、負の整数をトークンとして切り出しています。返り値はトークンの切り出しに成功したか、失敗したかを表します。
+
+#### 3.4.2.2.2 tokenizeStringLiteral
+
+`tokenizeStringLiteral()` メソッドは、文字列の現在位置から開始して、文字列リテラルトークンを切り出すためのメソッドです。返り値はトークンの切り出しに成功したか、失敗したかを表します。
+
+#### 3.4.2.2.3 accept
+
+`accept()` メソッドは、文字列の現在位置から開始して、文字列`literal`にマッチしたら、種類`type`で値が`value`なトークンを生成するメソッドです。これは、`toknizeStringLiteral()`など他のメソッドから呼び出されます。
+
+#### 3.4.2.2.4 moveNext
+
+`moveNext()` メソッドは、字句解析器の中核となるメソッドです。呼び出されると、次のトークンは発見するまで、文字列の位置を進め、トークンが発見されたら、トークンを`fetched`に格納して、`true`を返します。トークン列の終了位置に来たら`false`を返します。これは、`Iterator`パターンの一種とも言えますが、典型的な`Iterator`と異なり、`moveNext()`が副作用を持つ点がポイントでしょうか。この点は、.NETの`IEnumerator`のアプローチを参考にしました。
+
+#### 3.4.2.2.5 current
+
+`current()`メソッドは、`moveNext()`メソッドが`true`を返したあとに呼び出すと、切り出せたトークンを取得することができます。`moveNext()`を次に呼び出すと、`current()`の値が変わってくる点に注意が必要です。
+
+### 3.4.3 JSONの構文解析器
+
+JSONの字句解析器である`SimpleTokenizer`はこのようにして実装しましたが、JSONの構文解析器である`SimpleJSONParser`はどのように実装されているのでしょうか。このクラスは、主に
+
+- `parseTrue()`メソッド：規則`TRUE`に対応する構文解析メソッド
+- `parseFalse()`メソッド：規則`FALSE`に対応する構文解析メソッド
+- `parseNull()`メソッド：規則`NULL`に対応する構文解析メソッド
+- `parseString()`メソッド：規則`STRING`に対応する構文解析メソッド
+- `parseNumber()`メソッド：規則`NUMBER`に対応する構文解析メソッド
+- `parseObject()`メソッド：規則`object`に対応する構文解析メソッド
+- `parseArray()`メソッド：規則`array`に対応する構文解析メソッド
+- `parseValue()`メソッド: 規則`value`に対応する構文解析メソッド
+
+というメソッドからなっており、それぞれが内部で`SimpleTokenizer`クラスのオブジェクトのメソッドを呼び出しています。では、これらのメソッドについて順番に見て行きましょう。
+
+#### parseTrue
+
+`parseTrue()`メソッドは、規則`TRUE`に対応するメソッドで、JSONの`true`に対応するものを解析するメソッドでもあります。実装は以下のようになります：
+
+```java
+    private JsonAst.JsonTrue parseTrue() {
+        if(!tokenizer.current().equals(true)) {
+            return JsonAst.JsonTrue.getInstance();
+        }
+        throw new parser.ParseException("expected: true, actual: " + tokenizer.current().value);
+    }
 ```
 
-言語を文字列の集合として見ることについて、掴めて来たのではないかと思います。
+見るとわかりますが、`tokenizer`が保持している次のトークンの値が`true`だったら、`JsonAst.JsonTrue`のインスタンスを返しているだけですね。ほぼ、字句解析器に処理を丸投げしているだけですから、詳しい説明は不要でしょう。
 
-言語を文字列の集合として表現すると、**集合論**の立場で言語について論じられることが大きなメリットです。
+#### parseFalse
 
-たとえば、Dyck言語の条件を満たす文字列$()$について以下のように表記することが可能です。集合$DK$と$()$の関係について、
+`parseTrue()`メソッドは、規則`FALSE`に対応するメソッドで、JSONの`false`に対応するものを解析するメソッドでもあります。実装は以下のようになります：
 
-$$
-\verb|()| \in DK
-$$
-
-と表記する事が可能になります。
-
-一方で、Dyck言語でない文字列")("は以下のように表記することが可能になります。
-
-$$
-\verb|)(| \notin DK
-$$
-
-$DK$は単なる集合なので、皆さんが中学や高校で習ったように、和や積を考えることができます。
-
-たとえば、Ruby言語を表す無限集合を$RB$と考えたとき、集合の和$RB \cup DK$を考えることが出きます。$RB \cup DK$は以下のようになります。
-
-$$
-\begin{array}{l}
-RB \cup DK = \lbrace \\
-  \ \ \verb|()|, \\
-  \ \ \verb|puts 1|,\\
-  \ \ \verb|(())|,\\
-  \ \ \verb|puts 2|,\\
-  \ \ ... \\
-\rbrace
-\end{array}
-$$
-
-集合の積$RB \cap DK$を考えることもできます。Ruby言語のプログラムでかつDyck言語であるような文字列は存在しませんから$$RB \cap DK$$は**空集合**になります。つまり、$$RB \cap DK = \emptyset$$です。
-
-集合論の道具を自由に使えるのが言語を文字列の集合としてとらえることのメリットです。
-
-別の例として、Java言語のプログラムの後方互換性を考えてみましょう。Java 5で書かれたプログラムはJava 8でも（基本的に）OKです。ここで、Java 5のプログラムを表す集合を`J5`、Java 8のプログラムを表す集合を`J8`とすると、以下のように表記できます。
-
-$$
-J5 \subset J8
-$$
-
-Java 8はJava 5の後方互換であるという事実を、このように集合論の立場で言うことができるわけです。
-
-## 3.3 文脈自由言語と言語の階層
-
-ここまで見てきたように**ある**文脈自由文法は、言語、つまり、文字列の集合を定義するのでした。ところで、**すべての**文脈自由文法、言い換えれば文脈自由文法自体の集合はどのようなものになるのでしょうか？
-
-**ある**文脈自由文法は文字列の集合を定義するわけですから、ここで考えているのは**文字列の集合の集合**がどのような構造を持つかということになります。このような言語の集合のことを言語クラスと呼びます。
-
-この問題を考えるためには、皆さんが普段駆使しておられる正規表現を思い浮かべてもらうのがわかりやすいと思います。正規表現に馴染のない方もいると思うので念のため解説します。正規表現は**文字列のパターン**を定義するための言語です。現代のプログラミング言語で使用されている正規表現はさまざまな拡張が入っているため複雑になっていますが、本来の正規表現にとって重要なパーツのみを扱います。
-
-以下が正規表現を構成する要素です。$e_1$や$e_2$、$e$はそれ自体正規表現を表していることに注意が必要です。$a$は任意の文字1文字を表します。
-
-$$
-\begin{array}{ll}
-a &\ 文字 \\
-\epsilon &\ 空文字列 \\
-e_1 e_2 &\ 連接 \\
-e_2 | e_2 &\ 選択 \\
-e* &\ 繰り返し \\
-\end{array}
-$$
-
-正規表現はシンプルな規則によって構成されますが、多様なパターンを表現できます。以下は自然数を表現する正規表現です。
-
-```
-0|(1|2|3|4|5|6|7|8|9)(0|1|2|3|4|5|6|7|8|9)*
+```java
+    private JsonAst.JsonFalse parseFalse() {
+        if(!tokenizer.current().equals(false)) {
+            return JsonAst.JsonFalse.getInstance();
+        }
+        throw new parser.ParseException("expected: false, actual: " + tokenizer.current().value);
+    }
 ```
 
-通常の正規表現エンジンでは文字クラスと呼ばれる機能を使って`0|[1-9][0-9]*`のように書くことができますが意味は同じです。
+実装については、`parseTrue()`とほぼ同様なので説明は省略します。
 
-あるいは、7桁の郵便番号は次のような文字クラスを使って次のように表すことができます。文字クラスはシンタックスシュガーなので使わなくても同等の記述は可能ですが、説明を簡潔するために以降では文字クラスを使って表現します：
+#### parseNull
 
+`parseNull()`メソッドは、規則`NULL`に対応するメソッドで、JSONの`null`に対応するものを解析するメソッドでもあります。実装は以下のようになります：
+
+```java
+  private JsonAst.JsonNull parseNull() {
+        if(tokenizer.current().value == null) {
+            return JsonAst.JsonNull.getInstance();
+        }
+        throw new parser.ParseException("expected: null, actual: " + tokenizer.current().value);
+    }
 ```
-[0-9][0-9][0-9]-[0-9][0-9][0-9][0-9]
+
+実装については、`parseTrue()`とほぼ同様なので説明は省略します。
+
+#### parseString
+
+`parseString()`メソッドは、規則`STRING`に対応するメソッドで、JSONの`"..."`に対応するものを解析するメソッドでもあります。実装は以下のようになります：
+
+```java
+   private JsonAst.JsonString parseString() {
+        return new JsonAst.JsonString((String)tokenizer.current().value);
+   }
 ```
 
-これも`[0-9]{3}-[0-9]{4}`のように書くことができますが、`e{n}`で`e`の`n`回の繰り返しを表現するのは、文字クラスと同様に単なるシンタックスシュガーです。
+実装については、`parseTrue()`とほぼ同様なので説明は省略します。
 
-正規表現は色々な分野で使われており、正規表現によって非常に幅広い範囲の文字列集合、つまり言語を表現できます。しかし、正規表現にも限界があります。
+#### parseNumber
 
-正規表現の集合で表現される言語クラスを本書では$RL$と表記します。$RL$で表せないことが証明されている典型的な言語の1つがDyck言語です。つまり、
+`parseString()`メソッドは、規則`NUMBER`に対応するメソッドで、JSONの`1, 2, 3, 4, ...`に対応するものを解析するメソッドでもあります。実装は以下のようになります：
 
-$$
-DK \notin RL
-$$
+```java
+    private JsonAst.JsonNumber parseNumber() {
+        var value = (Integer)tokenizer.current().value;
+        return new JsonAst.JsonNumber(value);
+    }
+```
 
-ここでDKは言語であり、RLは言語クラス（言語の集合）であることに注意してください。
+実装については、`parseTrue()`とほぼ同様なので説明は省略します。
 
-さらに話を進めると、文脈自由文法が表す言語クラス（文脈自由言語と呼び、本書では$CFL$と表記します）と$RL$について次のような関係がなりたちます。
+#### parseObject
 
-$$
-RL \subset CFL
-$$
+`parseObject()`メソッドは、規則`object`に対応するメソッドで、JSONのオブジェクトリテラルに対応するものを解析するメソッドでもあります。実装は以下のようになります：
 
-これは、文脈自由文法では正規表現で表現可能なあらゆる文字列を表現可能だが、逆は成り立たないということです。
+```java
+    private JsonAst.JsonObject parseObject() {
+        if(tokenizer.current().type != Token.Type.LBRACE) {
+            throw new parser.ParseException("expected `{`, actual: " + tokenizer.current().value);
+        }
 
-これは単に理論上の話ではなく実用上大きな問題として立ちはだかります。たとえば、プログラミング言語の構文解析ではDyck言語のような**括弧の対応がとれていなければエラー**という文法が頻繁に登場しますが、正規表現では書けないのです。
+        tokenizer.moveNext();
+        if(tokenizer.current().type == Token.Type.RBRACE) {
+            return new JsonAst.JsonObject(new ArrayList<>());
+        }
 
-さて、Dyck言語に特徴づけられる**括弧の対応を計算できる**ことに文脈自由文法の利点があるわけですが、文脈自由文法だけであらゆる種類の文字列の集合を定義可能なのでしょうか？
+        List<Pair<JsonAst.JsonString, JsonAst.JsonValue>> members = new ArrayList<>();
+        var pair= parsePair();
+        members.add(pair);
 
-これは自明ではありませんが、不可能であることが証明されています。たとえば、$a$を$n$回、$b$を$n$回、$c$を$n$回だけ（$n \ge 0$）並べた文字列を表す言語$a^nb^nc^n$は、文脈自由文法で定義不可能です。
+        while(tokenizer.moveNext()) {
+            if(tokenizer.current().type == Token.Type.RBRACE) {
+                return new JsonAst.JsonObject(members);
+            }
+            if(tokenizer.current().type != Token.Type.COMMA) {
+                throw new parser.ParseException("expected: `,`, actual: " + tokenizer.current().value);
+            }
+            tokenizer.moveNext();
+            pair = parsePair();
+            members.add(pair);
+        }
 
-一方でこの言語は文脈依存言語（本書では$CSL$と表記）という言語クラスで定義可能で、$CFL$は$CSL$の真部分集合です。この事実は次のように表すことができます。
+        throw new parser.ParseException("unexpected EOF");
+    }
+```
 
-$$
-CFL \subset CSL
-$$
+まず、最初のif文で、次のトークンが`{`であることを確認した後に、
 
-このように、言語クラスには階層があります。これまででてきた言語クラスを含めると、言語クラスの階層は次のようになります。
+- その次のトークンが`}`であった場合：空オブジェクトを返す
+- それ以外の場合： `parsePair()` を呼び出し、 `string:pair` のようなペアを解析した後、以下のループに突入：
+  - 次のトークンが`}`の場合、集めたペアのリストを引数として、`JsonAst.JsonObject()`オブジェクトを作って返す
+  - それ以外で、次のトークンが`,`でない場合、構文エラーを投げて終了
+  - それ以外の場合：次のトークンをフェッチして来て、`parsePair()`を呼び出して、ペアを解析した後、リストにペアを追加
 
-$$
-RL \subset CFL \subset CSL
-$$
+のような動作を行います。実際のコードと対応付けてみると、より理解が進むでしょう。
 
-言語クラスとしては$RL$（正規言語）よりも$CFL$（文脈自由言語）の方が強力であり、$CFL$より$CSL$（文脈依存言語）方が強力ということですね。
+#### parseArray
 
-わかりやすく図として表現すると以下のようになります。
+`parseArray()`メソッドは、規則`array`に対応するメソッドで、JSONの配列リテラルに対応するものを解析するメソッドでもあります。実装は以下のようになります：
 
-![言語クラスの階層](./img/chapter3/chomsky1.svg)
+```java
+    private JsonAst.JsonArray parseArray() {
+        if(tokenizer.current().type != Token.Type.LBRACKET) {
+            throw new parser.ParseException("expected: `[`, actual: " + tokenizer.current().value);
+        }
 
-CSLよりさらに強力な言語クラスも存在しますが、実はもっとも強い言語クラスが存在しています。そのクラスは**帰納的加算言語**と呼ばれていて、現存する（ほぼ）すべてのプログラミング言語の能力と一致します。
+        tokenizer.moveNext();
+        if(tokenizer.current().type == Token.Type.RBRACKET) {
+            return new JsonAst.JsonArray(new ArrayList<>());
+        }
 
-（ほぼ）すべてのプログラミング言語はチューリング完全であるという意味で能力的に等しいということを聞いたことがあるプログラマーの方も多いでしょう。
+        List<JsonAst.JsonValue> values = new ArrayList<>();
+        var value = parseValue();
+        values.add(value);
 
-形式言語の用語で言い換えれば、任意のプログラミング言語で生成可能な言語（＝文字列集合）の全体である言語クラスは帰納的加算言語とちょうど一致するということになります。
+        while(tokenizer.moveNext()) {
+            if(tokenizer.current().type == Token.Type.RBRACKET) {
+                return new JsonAst.JsonArray(values);
+            }
+            if(tokenizer.current().type != Token.Type.COMMA) {
+                throw new parser.ParseException("expected: `,`, actual: " + tokenizer.current().value);
+            }
+            tokenizer.moveNext();
+            value = parseValue();
+            values.add(value);
+        }
 
-# 3.4 生成規則と導出
+        throw new ParseException("unexpected EOF");
+    }
+ ```
 
-文脈自由文法は生成規則の集まりからできていることを学びました。ところで、生成規則とはどういう意味なのでしょうか。上のDyck言語を表す文脈自由文法をもう一度眺めてみましょう。
+まず、最初のif文で、次のトークンが`[`であることを確認した後に、
 
-$$
-\begin{array}{lll}
-D & \rightarrow & P \\
-P & \rightarrow & ( P ) P \\
-P & \rightarrow & \epsilon
-\end{array}
-$$
+- その次のトークンが`]`であった場合：空オブジェクトを返す
+- それ以外の場合： `parseValue()` を呼び出し、 `value`を解析した後、以下のループに突入：
+  - 次のトークンが`}`の場合、集めた`values`のリストを引数として、`JsonAst.JsonObject()`オブジェクトを作って返す
+  - それ以外で、次のトークンが`,`でない場合、構文エラーを投げて終了
+  - それ以外の場合：次のトークンをフェッチして来て、`parsePair()`を呼び出して、`value`を解析した後、リストに`value`を追加
 
-非終端記号$D$はカッコの対応が取れた文字列の集合を表しています。ここで見方を変えると、$D$から$()$, $(())$, $((()))$, $()()$などの文字列を生成することができるということです。文法から文字列を生成することを導出と呼びます。
+のような動作を行います。実際のコードと対応付けてみると、より理解が進むでしょう。
 
-この導出の仕方は大きく分けて
+なお、`parseArray()`のコードを読めばわかるように、ほとんどのコードは、`parseObject()`と共通のものになっています。もしこれが気になるようであれば、共通部分をくくりだすことも出来ます。
 
-- 最左導出（Leftmost Derivation）
-- 最右導出（Rightmost Derivation）
+### 3.5 まとめ
 
-の2つがあります。以降の節では、この導出について詳しく説明します。
+この章では、JSONの構文解析や字句解析を実際に作ってみることを通して、構文解析の基礎について学んでもらいました。特に、
 
-## 3.4.1 最左導出
+- 3.1 JSONの定義 
+- 3.2 JSONのBNF
+- 3.3 JSONの構文解析機（PEG版）
+- 3.4 字句解析器を使った構文解析器
 
-最左導出は、生成規則を適用する際に常に一番左の非終端記号を展開する方法です。これにより導出過程が一意に決定されます。例として次の文脈自由文法を考えてみましょう。
+といった順番で、JSONの定義から入って、PEGによるJSONパーザ、字句解析器を使った構文解析器の作り方について学んでもらいました。この書籍中で使ったJSONはECMAScriptなどで定義されている正式なJSONに比べてサブセットになっており、たとえば、浮動小数点数が完全に扱えないという制限がありますが、構文解析器全体から見ればささいなことなので、この章を理解出来れば、JSONの構文解析についてはある程度理解出来たと思って構いません。
 
-$$
-\begin{align*}
-S & \rightarrow AB \\
-A & \rightarrow aA \\
-A & \rightarrow a \\
-B & \rightarrow bB \\
-B & \rightarrow b \\
-\end{align*}
-$$
+次の章では、文脈自由文法（Context-Free Grammar, CFG）の考え方について学んでもらいます。というのは、文脈自由文法は、現在使われているほとんどの構文解析アルゴリズム（もちろん、PEG等を除く）の基盤となっている概念であって、CFGの理解なくしては、その後の構文解析の理解もおぼつかないからです。
 
-最左導出によって$S$から$aabb$を導出する過程を示します。
-
-$$
-\begin{align*}
-S & \Rightarrow AB & (S \rightarrow ABを適用) \\
-AB & \Rightarrow aAB & (A \rightarrow aAを適用) \\
-aAB & \Rightarrow aaB & (A \rightarrow a適用) \\
-aaB & \Rightarrow aabB & (B \rightarrow bBを適用) \\
-aabB & \Rightarrow aabb & (B \rightarrow bを適用)
-\end{align*}
-$$
-
-最左導出は、これ以上適用できる規則がなくなるまで、常に一番左の非終端記号を展開していきます。
-
-## 3.4.2 最右導出
-
-最右導出は、生成規則を適用する際に常に一番右の非終端記号を展開する方法です。最左導出と同様に導出過程が一意に決定されます。さきほどと同じ文脈自由文法を考えてみましょう。
-
-$$
-\begin{align*}
-S & \rightarrow AB \\
-A & \rightarrow aA \\
-A & \rightarrow a \\
-B & \rightarrow bB \\
-B & \rightarrow b \\
-\end{align*}
-$$
-
-最右導出によって$S$から$aabb$を導出する過程を示します。
-
-$$
-\begin{align*}
-S & \Rightarrow AB & (S \rightarrow ABを適用) \\
-AB & \Rightarrow AbB & (B \rightarrow bBを適用) \\
-AbB & \Rightarrow Abb & (B \rightarrow bを適用) \\
-Abb & \Rightarrow aAbb & (A \rightarrow aAを適用) \\
-aAbb & \Rightarrow aabb & (A \rightarrow aを適用)
-\end{align*}
-$$
-
-最右導出は、これ以上適用できる規則がなくなるまで、常に一番右の非終端記号を展開します。
-
-最左導出と最右導出では最終的に同じ文字列を導出することが可能です。しかし、導出過程が異なります。
-
-先取りしておくと、形式言語における最左導出がいわゆる下向き構文解析に対応し、最右導出の逆操作が上向き構文解析に対応します。これらについては次の章で説明します。
-
-生成規則から文字列を生成するために2つの導出方法を使い分けることができることを覚えておいてください。
+逆に、CFGの考え方さえわかってしまえば、個別の構文解析アルゴリズム自体は、それほど難しいとは感じられなくなって来るかもしれません。
