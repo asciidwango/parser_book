@@ -1,939 +1,1954 @@
-# 5. 構文解析器生成系の世界
+# 5. 構文解析アルゴリズム古今東西
 
-　4章では現在知られている構文解析手法について、アイデアと提案手法の概要について説明しました。実は、構文解析の世界ではよく知られていることなのですが、4章で説明した各種構文解析手法は毎回プログラマが手で実装する必要はありません。
+第2章で算術式を例にしてBNFや抽象構文木といった基礎概念を説明しました。第3章ではJSONの構文解析器の実装を通してPEGによる構文解析と単純な字句解析を用いた構文解析のやり方を学びました。第4章では文脈自由文法と形式言語の階層の話をしました。これでようやく準備が整ったので、本書の本丸である構文解析アルゴリズムの話ができます。
 
-　というのは、CFGやPEG（その類似表記も含む）によって記述された文法定義から特定の構文解析アルゴリズムを用いた構文解析器を生成する構文解析器生成系というソフトウェアがあるからです。もちろん、それぞれの構文解析アルゴリズムや生成する構文解析器の言語ごとに別のソフトウェアを書く必要がありますが、ひとたびある構文解析アルゴリズムのための構文解析器生成系を誰かが書けば、その構文解析アルゴリズムを知らないプログラマでもその恩恵にあずかることができるのです。
+といっても、戸惑う読者の方が多いかもしれません。これまで「構文解析アルゴリズム」について具体的な話はまったくなかったのですから。しかし、皆さんは、第3章で二つの構文解析アルゴリズムを使ってJSONの構文解析器を**すでに**書いているのです。
 
-　構文解析器生成系でもっとも代表的なものはyaccあるいはその互換実装であるGNU bisonでしょう。yaccはLALR(1)法を利用したCの構文解析器を生成してくれるソフトウェアであり、yaccを使えばプログラマはLALR(1)法の恩恵にあずかることができます。
+第3章で最初に実装したのはPEGと呼ばれる手法の素朴な実装です。次に実装したのは*LL(1)*っぽい再帰下降構文解析器です。**再帰下降**という言葉は見慣れないものなので、疑問に思われる読者の方も多いと思います。その疑問は脇において、第3章での実装が理解できたのなら、皆さんはすでに直感的に構文解析アルゴリズムを理解していることになります。
 
-　この章では構文解析器生成系という種類のソフトウェアの背後にあるアイデアからはじまり、LL(1)、LALR(1）、PEGのための構文解析器を作る方法や多種多様な構文解析器生成系についての紹介などを行います。
+この章では、2024年までに発表された主要な構文解析アルゴリズムについて、筆者の独断と偏見を交えて解説します。この章で紹介する構文解析アルゴリズムのほとんどについて、その構文解析アルゴリズムを使った構文解析器を生成してくれる構文解析器生成系が存在します。構文解析機生成系については第5章で説明しますが、ここではさわりだけを紹介しておきます。
 
-　また、この章の最後ではある意味構文解析生成系の一種とも言えるパーザコンビネータの実装方法について踏み込んで説明します。構文解析生成系はいったん対象となるプログラミング言語のソースコードを生成します。この時、対象言語のコードを部分的に埋め込む必要性が出てくるのですが、この「対象言語のコードを埋め込める必要がある」というのは結構曲者でして、実用上ほぼ必須だけど面倒くささと伴うので、構文解析系をお手軽に作るとは行かない部分があります。
+たとえば、構文解析アルゴリズムとして有名な*LALR(1)*は、もっともメジャーな構文解析器生成系でCコードを生成するyacc（GNUによる再実装であるbisonが主流）で採用されています。*LL(1)*はJava向けの構文解析器生成系としてメジャーなJavaCCで採用されている方式です。*ALL(*)*は、Javaをはじめとした多言語向け構文解析器生成系として有名なANTLRで採用されています。PEGを採用した構文解析器生成系も多数存在します。
 
-　一方、パーザコンビネータであれば、いわゆる「ラムダ式」を持つほとんどのプログラミング言語で比較的簡単に実装できます。本書で利用しているJava言語でも同様です。というわけで、本章を読めば皆さんもパーザコンビネータを明日から自前で実装できるようになります。
+このように、なにかの構文解析アルゴリズムがあれば、構文解析アルゴリズムに基づいた構文解析機生成系を作ることができます。世dんですが、筆者は大学院生時代にPEGおよびPackrat Parsingの研究をしており、その過程でPEGによる構文解析器生成系を作ったものです。
 
-## 5.1 Dyck言語の文法とPEGによる構文解析器生成
+小難しいことばかり言うのは趣味ではないので、さっそく、構文解析アルゴリズムの世界を覗いてみましょう！　
 
-これまで何度も登場したDyck言語は明らかにLL(1)法でもLR(1)法でもPEGによっても解析可能な言語です。実際、4章ではDyck言語を解析する手書きのPEGパーザを書いたのでした。しかし、立ち戻ってよくよく考えてみると退屈な繰り返しコードが散見されたのに気づいた方も多いのではないでしょうか（4章に盛り込む予定）。
+## 5.1 下向き構文解析と上向き構文解析
 
-実際のところ、Dyck言語を表現する文法があって、構文解析アルゴリズムがPEGということまで分かれば対応するJavaコードを**機械的に生成する**ことも可能そうに見えます。特に、構文解析はコード量が多いわりには退屈な繰り返しコードが多いものですから、文法からJavaコードを生成できれば劇的に工数を削減できそうです。
+具体的な構文解析アルゴリズムの説明に入る前に、構文解析アルゴリズムは大別して、
 
-このように「文法と構文解析手法が決まれば、後のコードは自動的に決定可能なはずだから、機械に任せてしまおう」という考え方が構文解析器生成系というソフトウェアの背後にあるアイデアです。
+- 上から下へ（下向き）
+- 下から上へ（上向き）
 
-早速ですが、以下のようにDyck言語を表す文法が与えられたとして、PEGを使った構文解析器を生成する方法を考えてみましょう。
+の二つのアプローチがあることを理解しておきましょう。下向き構文解析法と上向き構文解析法では真逆の発想で構文解析を行うからです。
 
-```text
-D <- P;
-P <- "(" P ")" | "()";
-```
+## 5.2 下向き構文解析の概要
 
-PEGでは非終端記号の呼び出しは関数呼び出しとみなすことができますから、まず次のようなコードになります。
+まずは下向き構文解析法です。下向き構文解析では予測型とバックトラック型で若干異なる方法で構文解析をしますが、ここでは予測型の下向き構文解析法を説明します。予測型の下向き構文解析法ではCFGの開始記号から構文解析を開始し、規則に従って再帰的に構文解析を行っていきます。
+
+第4章で例に出てきたDyck言語を例にして、具体的な方法を説明します。Dyck言語の文法は以下のようなものでした。
+
+$$
+\begin{array}{lll}
+D & \rightarrow & \$ P \$ \\
+P & \rightarrow & ( P ) P \\
+P & \rightarrow & \epsilon \\
+\end{array}
+$$
+
+このCFGはカッコがネストした文字列の繰り返し（空文字列を含む）を過不足無く表現しているわけですが、`(())`という文字列がマッチするかを判定する問題を考えてみましょう。
+
+まず最初に、開始記号が$`D`$で規則$`D \rightarrow $ P $ `$があるのでスタックに積み込みます。
+
+$$
+\begin{align*}
+先読み文字列：& \\
+スタック：& \lbrack D \rightarrow \uparrow \$ P \$ \rbrack
+\end{align*}
+$$
+
+次に最初の1文字を入力文字列から読み込んで、先読み文字列に追加します。
+
+$$
+\begin{align*}
+先読み文字列：& \$ \\
+スタック：& \lbrack D \rightarrow \uparrow \$ P \$ \rbrack
+\end{align*}
+$$
+
+入力文字列の先頭と現在の解析位置にある文字が`$`であるため、先読み文字列の先頭とマッチします。そこで、文字列を消費します。
+
+$$
+\begin{align*}
+先読み文字列：& \\
+スタック：& \lbrack D \rightarrow \$ \uparrow P \$ \rbrack
+\end{align*}
+$$
+
+その次ですが、候補となる規則には$`P \rightarrow (P)P`$と$`P \rightarrow \epsilon`$があるものの、先読み文字列が空なので、次の文字を読み込みます。
+
+$$
+\begin{align*}
+先読み文字列：\verb|(| & \\
+スタック：& \lbrack D \rightarrow \$ \uparrow P \$ \rbrack
+\end{align*}
+$$
+
+規則が$`P \rightarrow (P)P`$に確定したので、スタックに規則を積みます。
+
+$$
+\begin{align*}
+先読み文字列：& \verb|(| \\
+スタック：& \lbrack D \rightarrow \$ \uparrow P \$, P \rightarrow \uparrow (P) P\rbrack
+\end{align*}
+$$
+
+次の文字は`(`であり、先読み文字列の先頭とマッチします。そこで、文字列を消費します。
+
+$$
+\begin{align*}
+先読み文字列：& \\
+スタック：& \lbrack D \rightarrow \$ \uparrow P \$, P \rightarrow ( \uparrow P) P\rbrack
+\end{align*}
+$$
+
+先ほどと同様に先読み文字列に1文字追加します。
+
+$$
+\begin{align*}
+先読み文字列：& \verb|(| \\
+スタック：& \lbrack D \rightarrow \$ \uparrow P \$, P \rightarrow ( \uparrow P) P\rbrack
+\end{align*}
+$$
+
+規則は$`P \rightarrow (P)P`$に確定します。そこで、スタックに確定した規則を積みます。
+
+$$
+\begin{align*}
+先読み文字列：& \verb|(| \\
+スタック：& \lbrack D \rightarrow \$ \uparrow P \$, P \rightarrow ( \uparrow P) P, P \rightarrow \uparrow (P)P\rbrack
+\end{align*}
+$$
+
+先読み文字列の先頭と現在の解析位置にある文字がマッチするので、文字列を消費します。
+
+$$
+\begin{align*}
+先読み文字列：& \\
+スタック：& \lbrack D \rightarrow \$ \uparrow P \$, P \rightarrow ( \uparrow P) P, P \rightarrow ( \uparrow P ) P\rbrack
+\end{align*}
+$$
+
+次が非終端記号$`P`$ですが、候補は$`P \rightarrow \epsilon`$だけです。本来ならスタックにこの規則を積んで下ろすという作業が必要ですが、省略して$`P`$の分を読み進めてしまいます。
+
+$$
+\begin{align*}
+先読み文字列：& \\
+スタック：& \lbrack D \rightarrow \$ \uparrow P \$, P \rightarrow ( \uparrow P ) P, P \rightarrow ( P \uparrow ) P\rbrack
+\end{align*}
+$$
+
+先読み文字列に1文字追加します。
+
+$$
+\begin{align*}
+先読み文字列：& \verb|)| \\
+スタック：& \lbrack D \rightarrow \$ \uparrow P \$, P \rightarrow ( \uparrow P ) P, P \rightarrow ( P \uparrow ) P\rbrack
+\end{align*}
+$$
+
+先読み文字列の先頭と現在の解析位置にある文字がマッチするので、文字列を消費します。
+
+$$
+\begin{align*}
+先読み文字列：& \\
+スタック：& \lbrack D \rightarrow \$ \uparrow P \$, P \rightarrow ( \uparrow P ) P, P \rightarrow ( P ) \uparrow P\rbrack
+\end{align*}
+$$
+
+先ほどと同様、規則の候補は$`P \rightarrow \epsilon`$だけです。$`P`$の分を読み進めてしまいます。
+
+$$
+\begin{align*}
+先読み文字列：& \\
+スタック：& \lbrack D \rightarrow \$ \uparrow P \$, P \rightarrow ( \uparrow P ) P, P \rightarrow ( P ) \uparrow \rbrack
+\end{align*}
+$$
+
+スタックトップの規則を解析し終えたので、スタックから取り除きます。
+
+$$
+\begin{align*}
+先読み文字列：& \\
+スタック：& \lbrack D \rightarrow \$ \uparrow P \$, P \rightarrow ( P \uparrow ) P
+\end{align*}
+$$
+
+さらに1文字読み込みます。
+
+$$
+\begin{align*}
+先読み文字列：& \verb|)| \\
+スタック：& \lbrack D \rightarrow \$ \uparrow P \$, P \rightarrow ( P \uparrow ) P
+\end{align*}
+$$
+
+先読み文字列の先頭とマッチしますから、文字列を消費します。
+
+$$
+\begin{align*}
+先読み文字列：& \\
+スタック：& \lbrack D \rightarrow \$ \uparrow P \$, P \rightarrow ( P ) \uparrow P \rbrack
+\end{align*}
+$$
+
+先ほどと同様、規則の候補は$`P \rightarrow \epsilon`$だけです。$`P`$の分を読み進めてしまいます。
+
+$$
+\begin{align*}
+先読み文字列：& \\
+スタック：& \lbrack D \rightarrow \$ \uparrow P \$, P \rightarrow ( P ) P \uparrow \rbrack
+\end{align*}
+$$
+
+スタックトップの規則を解析し終えたので、スタックから取り除きます。
+
+$$
+\begin{align*}
+先読み文字列：& \\
+スタック：& \lbrack D \rightarrow \$ P \uparrow \$ \rbrack
+\end{align*}
+$$
+
+文字列の末尾なので`$`を読み込みます。
+
+$$
+\begin{align*}
+先読み文字列：\$ & \\
+スタック：& \lbrack D \rightarrow \$ P \uparrow \$ \rbrack
+\end{align*}
+$$
+
+先読み文字列の先頭とマッチしますから、文字列を消費します。
+
+$$
+\begin{align*}
+先読み文字列：& \\
+スタック：& \lbrack D \rightarrow \$ P \$ \uparrow \rbrack
+\end{align*}
+$$
+
+規則の最後に到達したので、スタックから要素を取り除きます。
+
+$$
+\begin{align*}
+先読み文字列：& \\
+スタック：& \lbrack \rbrack
+\end{align*}
+$$
+
+入力文字列の終端に到達し、スタックが空になったので、入力文字列`(())`はDyck言語の文法に従っていることがわかりました。
+
+予測型の下向き構文解析では以下の動作を繰り返します。
+
+1. 残りの文字列から、1文字とってきて先読み文字列に追加する
+2. 次が非終端記号で、先読み文字列から適用すべき規則が決定できる場合スタックにその規則を積む。規則が決定できない場合はエラー。次が終端記号であれば、先読み文字列の先頭とマッチするかを確認し、マッチすれば文字列を消費し、マッチしない場合はエラーを返す
+3. 規則の最後に到達した場合は、スタックから要素を取り除く
+
+## 5.3 下向き構文解析法のJavaによる実装
+
+このような動作をJavaコードで表現することを考えてみます。
 
 ```java
-public boolean parseD() {
-    return parseP();
-}
-public boolean parseP() {
-    "(" P ")" | "()"
-}
-```
+// D → P
+// P → ( P ) P
+// P → ε
+public class Dyck {
+    private final String input;
+    private int position;
 
-## 5.1 JSONの構文解析器を生成する
-
-LL(1)構文解析器生成系で、JSONのパーザが作れることを示す。これを通じて、構文解析器生成系が実用的に使えることを理解してもらう。
-
-## 5.2 構文解析器生成系の分類
-
-構文解析器生成系は1970年代頃から研究の蓄積があり、数多くの構文解析生成系がこれまで開発されています。基本的には構文解析器生成系と採用しているアルゴリズムは対応するので、たとえば、JavaCCはLL(1)構文解析器を出力するため、LL(1)構文解析器生成系であると言ったりします。
-
-同様に、yacc(bison)はLALR(1)構文解析器生成系を出力するので、LALR(1)構文解析器生成系であると言ったりもします。ただし、例外もあります。bisonはyaccと違って、LALR(1)より広いGLR構文解析器を生成できるので、GLR構文解析器生成系であるとも言えるのです。実際には、yaccを使う場合、ほとんどはLALR(1)構文解析器を出力するので、GLRについては言及されることは少ないですが、そのようなことは知っておいても損はないでしょう。
-
-より大きなくくりでみると、下向き構文解析（LL法やPEG）と上向き構文解析（LR法など）という観点から分類することもできますし、ともに文脈自由文法ベースであるLL法やLR法と、解析表現文法など他の形式言語を用いた構文解析法を対比してみせることもできます。
-
-## 5.3 JavaCC：Javaの構文解析生成系の定番
-
-1996年、Sun Microsystems（当時）は、Jackという構文解析器生成系をリリースしました。その後、Jackの作者が自らの会社を立ち上げ、JackはJavaCCに改名されて広く知られることとなりましたが、現在では紆余曲折の末、[javacc.github.io](https://javacc.github.io/javacc)の元で開発およびメンテナンスが行われています。現在のライセンスは3条項BSDライセンスです。
-
-JavaCCはLL(1)法を元に作られており、構文定義ファイルからLL(1)パーザを生成します。以下は四則演算を含む数式を計算できる電卓をJavaCCで書いた場合の例です。
-
-```java
-options {
-  STATIC = false;
-  JDK_VERSION = "17";
-}
-
-PARSER_BEGIN(Calculator)
-package com.github.kmizu.calculator;
-public class Calculator {
-  public static void main(String[] args) throws ParseException {
-    Calculator parser = new Calculator(System.in);
-    parser.start();
-  }
-}
-PARSER_END(Calculator)
-
-SKIP : { " " | "\t"  | "\r" | "\n" }
-TOKEN : {
-  <ADD: "+">
-| <SUBTRACT: "-">
-| <MULTIPLY: "*">
-| <DIVIDE: "/">
-| <LPAREN: "(">
-| <RPAREN: ")">
-| <INTEGER: (["0"-"9"])+>
-}
-o
-public int expression() :
-{int r = 0;}
-{
-  r=add() <EOF> { return r; }
-}
-
-public int add() :
-{int r = 0; int v = 0;}
-{
-    r=mult() ( <ADD> v=mult() { r += v; }| <SUBTRACT> v=mult() { r -= v; })* {
-        return r;
+    public Dyc(String input) {
+        this.input = input;
+        this.position = 0;
     }
-}
 
-
-public int mult() :
-{int r = 0; int v = 0;}
-{
-    r=primary() ( <MULTIPLY> v=primary() { r *= v; }| <DIVIDE> r=primary() { r /= v; })* {
-        return r;
-    }
-}
-
-public int primary() :
-{int r = 0; Token t = null;}
-{
-(
-  <LPAREN> r=expression() <RPAREN>
-| t=<INTEGER> { r = Integer.parseInt(t.image); }
-) { return r; }
-}
-
-```
-
-の部分はトークン定義になります。ここでは、7つのトークンを定義しています。トークン定義の後が構文規則の定義になります。ここでは、
-
-- `expression()`
-- `add()`
-- `mult()`
-- `primary()`
-
-の4つの構文規則が定義されています。各構文規則はJavaのメソッドに酷似した形で記述されますが、実際、ここから生成される.javaファイルには同じ名前のメソッドが定義されます。`expression()`が`add()`を呼び出して、`add()`が`mult()`を呼び出して、`mult()`が`primary()`を呼び出すという構図は第2章で既にみた形ですが、第2章と違って単純に宣言的に各構文規則の関係を書けばそれでOKなのが構文解析器生成系の強みです。
-
-このようにして定義した電卓プログラムは次のようにして利用することができます。
-
-```java
-package com.github.kmizu.calculator;
-
-import jdk.jfr.Description;
-import org.junit.jupiter.api.Test;
-import com.github.kmizu.calculator.Calculator;
-import java.io.*;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-
-public class CalculatorTest {
-    @Test
-    @Description("1 + 2 * 3 = 7")
-    public void test1() throws Exception {
-        Calculator calculator = new Calculator(new StringReader("1 + 2 * 3"));
-        assertEquals(7, calculator.expression());
+    public boolean parse() {
+        boolean result = D();
+        return result && position == input.length();
     }
 
-    @Test
-    @Description("(1 + 2) * 4 = 12")
-    public void test2() throws Exception {
-        Calculator calculator = new Calculator(new StringReader("(1 + 2) * 4"));
-        assertEquals(12, calculator.expression());
+    private boolean D() {
+        return P();
     }
 
-    @Test
-    @Description("(5 * 6) - (3 + 4) = 23")
-    public void test3() throws Exception {
-        Calculator calculator = new Calculator(new StringReader("(5 * 6) - (3 + 4)"));
-        assertEquals(23, calculator.expression());
-    }
-}
-```
-
-この`CalculatorTest`クラスではJUnit5を使って、JavaCCで定義した`Calculator`クラスの挙動をテストしています。空白や括弧を含む数式を問題なく計算できているのがわかるでしょう。
-
-このようなケースでは先読みトークン数が1のため、JavaCCのデフォルトで構いませんが、定義したい構文によっては先読み数を2以上に増やさなければいけないこともあります。そのときは、以下のようにして先読み数を増やすことができます：
-
-```java
-options {
-  STATIC = false;
-  JDK_VERSION = "17";
-  LOOKAHEAD = 2
-}
-```
-
-ここでは、`LOOKAHEAD = 2`というオプションによって、先読みトークン数を2に増やしています。LOOKAHEADは固定されていれば任意の正の整数にできるので、JavaCCはデフォルトではLL(1)だが、オプションを設定することによってLL(k)になるともいえます。
-
-また、JavaCCは構文定義ファイルの文法がかなりJavaに似ているため、生成されるコードの形を想像しやすいというメリットがあります。JavaCCはJavaの構文解析生成系の中では最古の部類の割に今でも現役で使われているのは、Javaユーザにとっての使いやすさが背景にあるように思います。
-
-
-## 5.4 Yacc (GNU Bison)：構文解析器生成系の老舗
-
-YaccはYet another compiler compilerの略で、日本語にすると「もう一つのコンパイラコンパイラ」といったところでしょうか。yaccができた当時は、コンパイラを作るためのコンパイラについての研究が盛んだった時期で、構文解析器生成系もそのための研究の副産物とも言えます。1970年代にAT&Tのベル研究所にいたStephen C. Johnsonによって作られたソフトウェアで、非常に歴史がある構文解析器生成系です。YaccはLALR(1)法をサポートし、lexという字句解析器生成系と連携することで構文解析器を生成することができます（もちろん、lexを使わない実装も可能）。Yacc自体は色々な構文解析器生成系に多大な影響を与えており、現在使われているGNU BisonはYaccのGNUによる再実装でもあります。
-
-Yaccを使って、四則演算を行う電卓プログラムを作るにはまず字句解析器生成系であるflex用の定義ファイルを書く必要ががあります。その定義ファイル`token.l`は次のようになります：
-
-```text
-%{
-#include "y.tab.h"
-%}
-
-%%
-[0-9]+      { yylval = atoi(yytext); return NUM; }
-[-+*/()]    { return yytext[0]; }
-[ \t]       { /* ignore whitespce */ }
-"\r\n"      { return EOL; }
-"\r"        { return EOL; }
-"\n"        { return EOL; }
-.           { printf("Invalid character: %s\n", yytext); }
-%%
-```
-
-`%%`から`%%`までがトークンの定義です。これはそれぞれ次のように読むことができます。
-
-- `[0-9]+      { yylval = atoi(yytext); return NUM; }`
-
-  0-9までの数字が1個以上あった場合はに数値として解釈し（`atoi(yytext)`)、トークン`NUM`として返します。
-
-- `[-+*/()]    { return yytext[0]; }`
-
-  `-`,`+`,`*`,`/`,`(`,`)`についてはそれぞれの文字をそのままトークンとして返します。
-
-- `[ \t]       { /* ignore whitespce */ }`
-
-  タブおよびスペースは単純に無視します
-
-- `"\r\n"      { return EOL; }`
-
-  改行はEOLというトークンとして返します
-
-- `"\r"        { return EOL; }`
-
-  前に同じ
-
-- `"\n"        { return EOL; }`
-
-  前に同じ
-
-- `.           { printf("Invalid character: %s\n", yytext); }`
-
-  それ以外の文字が来たらエラーを吐きます
-
-このトークン定義ファイルを入力として与えると、flexは`lex.yy.c`という形で字句解析器を出力します。
-
-次に、yaccの構文定義ファイルを書きます：
-
-```text
-%{
-#include <stdio.h>
-int yylex(void);
-void yyerror(char const *s);
-int yywrap(void) {return 1;}
-extern int yylval;
-%}
-
-%token NUM
-%token EOL
-%left '+' '-'
-%left '*' '/'
-
-%%
-
-input : expr EOL
-      { printf("Result: %d\n", $1); }
-      ;
-
-expr : NUM
-      { $$ = $1; }
-      | expr '+' expr
-      { $$ = $1 + $3; }
-      | expr '-' expr
-      { $$ = $1 - $3; }
-      | expr '*' expr
-      { $$ = $1 * $3; }
-      | expr '/' expr
-      {
-        if ($3 == 0) { yyerror("Cannot divide by zero."); }
-        else { $$ = $1 / $3; }
-      }
-      | '(' expr ')'
-      { $$ = $2; }
-      ;
-
-
-void yyerror(char const *s)
-{
-  fprintf(stderr, "Parse error: %s\n", s);
-}
-
-int main()
-{
-  yyparse();
-}
-```
-
-flexの場合と同じく、`%%`から`%%`までが構文規則の定義の本体です。実行されるコードが入っているので読みづらくなっていますが、それを除くと以下のようになります：
-
-```text
-% {
-%token NUM
-%token EOL
-%left '+' '-'
-%left '*' '/'
-}
-
-%%
-input : expr EOL
-      { printf("Result: %d\n", $1); }
-      ;
-
-expr : NUM
-      | expr '+' expr
-      | expr '-' expr
-      | expr '*' expr
-      | expr '/' expr
-      | '(' expr ')'
-      ;
-%%
-```
-
-だいぶ見やすくなりましたね。入力を表す`input`規則は`expr EOL`からなります。`expr`は式を表す規則ですから、その後に改行が来れば`input`は終了となります。
-
-次に、`expr`規則ですが、ここではyaccの優先順位を表現するための機能である`%left`を使ったため、優先順位のためだけに規則を作る必要がなくなっており、定義が簡潔になっています。ともあれ、こうして定義された文法定義ファイルをyaccに与えると`y.tab.c`というファイルを出力します。
-
-flexとyaccが出力したファイルを結合して実行ファイルを作ると、次のような入力に対して：
-
-```
-1 + 2 * 3
-2 + 3
-6 / 2
-3 / 0
-```
-
-それぞれ、次のような出力を返します。
-
-```
-Result: 7
-Result: 5
-Result: 3
-Parse error: Cannot divide by zero.
-```
-
-yaccはとても古いソフトウェアの一つですが、Rubyの文法定義ファイルparse.yはyacc用ですし、未だに各種言語処理系では現役で使われてもいます。
-
-## 5.5 ANTLR：多言語対応の強力な下向き構文解析生成系
-
-1989年にPurdue Compiler Construction set(PCCTS)というものがありました、ANTLRはその後継というべきもので、これまでに、LL(k) -> LL(*) -> ALL(*)と取り扱える文法の幅を広げつつアクティブに開発が続けられています。作者はTerence Parrという方ですが、構文解析器一筋（？）と言っていいくらい、ANTLRにこれまでの時間を費やしてきている人です。
-
-それだけに、ANTLRの完成度は非常に高いものになっています。また、一時期はLR法に比べてLL法の評価は低いものでしたが、Terence ParrがLL(k)を改良していく過程で、LL(*)やALL(*)のようなLR法に比べてもなんら劣らない、しかも実用的にも使いやすい構文解析法の発明に貢献したということができます。
-
-ANTLRはJava、C++などいくつもの言語を扱うことができますが、特に安心して使えるのはJavaです。以下は先程と同様の、四則演算を解析できる数式パーザをANTLRで書いた場合の例です。
-
-ANTLRでは構文規則は、`規則名 : 本体 ;` という形で記述しますが、LLパーザ向けの構文定義を素直に書き下すだけでOKです。
-
-```java
-grammar Expression;
-
-expression returns [int e]
-    : v=additive {$e = $v.e;}
-    ;
-
-additive returns [int e = 0;]
-    : l=multitive {$e = $l.e;} (
-      '+' r=multitive {$e = $e + $r.e;}
-    | '-' r=multitive {$e = $e - $r.e;}
-    )*
-    ;
-
-multitive returns [int e = 0;]
-    : l=primary {$e = $l.e;} (
-      '*' r=primary {$e = $e * $r.e;}
-    | '/' r=primary {$e = $e / $r.e;}
-    )*
-    ;
-
-primary returns [int e]
-    : n=NUMBER {$e = Integer.parseInt($n.getText());}
-    | '(' x=expression ')' {$e = $x.e;}
-    ;
-
-LP : '(' ;
-RP : ')' ;
-NUMBER : INT ;
-fragment INT :   '0' | [1-9] [0-9]* ; // no leading zeros
-WS  :   [ \t\n\r]+ -> skip ;
-
-```
-
-規則`expression`が数式を表す規則です。そのあとに続く`returns [int e]`はこの規則を使って解析を行った場合に`int`型の値を返すことを意味しています。これまで見てきたように構文解析器をした後には抽象構文木をはじめとして何らかのデータ構造を返す必要があります。`returns ...`はそのために用意されている構文です。名前が全て大文字の規則はトークンを表しています。
-
-数式を表す各規則についてはこれまで書いてきた構文解析器と同じ構造なので読むのに苦労はしないでしょう。
-
-規則`WS`は空白文字を表すトークンですが、これは数式を解析する上では読み飛ばす必要があります。 `[ \t\n\r]+ -> skip`は
-
-- スペース
-- タブ文字
-- 改行文字
-
-のいずれかが出現した場合は読み飛ばすということを表現しています。
-
-ANTLRは下向き型の構文解析が苦手とする左再帰もある程度扱うことができます。先程の定義ファイルでは繰り返しを使っていましたが、これを左再帰に直した以下の定義ファイルも全く同じ挙動をします。
-
-```java
-grammar LRExpression;
-
-expression returns [int e]
-    : v=additive {$e = $v.e;}
-    ;
-
-additive returns [int e]
-    : l=additive op='+' r=multitive {$e = $l.e + $r.e;}
-    | l=additive op='-' r=multitive {$e = $l.e - $r.e;}
-    | v=multitive {$e = $v.e;}
-    ;
-
-multitive returns [int e]
-    : l=multitive op='*' r=primary {$e = $l.e * $r.e;}
-    | l=multitive op='/' r=primary {$e = $l.e / $r.e;}
-    | v=primary {$e = $v.e;}
-    ;
-
-primary returns [int e]
-    : n=NUMBER {$e = Integer.parseInt($n.getText());}
-    | '(' x=expression ')' {$e = $x.e;}
-    ;
-
-LP : '(' ;
-RP : ')' ;
-NUMBER : INT ;
-fragment INT :   '0' | [1-9] [0-9]* ; // no leading zeros
-WS  :   [ \t\n\r]+ -> skip ;
-```
-
-左再帰を使うことでより簡単に文法を定義できることもあるので、あると嬉しい機能だと言えます。
-
-さらに、ANTLRは`ALL(*)`というアルゴリズムを採用しているため、通常のLLパーザでは扱えないような文法定義も取り扱うことができます。以下の「最小XML」文法定義を見てみましょう。
-
-```java
-grammar PetitXML;
-@parser::header {
-    import static com.github.asciidwango.parser_book.ch5.PetitXML.*;
-    import java.util.*;
-}
-
-root returns [Element e]
-    : v=element {$e = $v.e;}
-    ;
-
-element returns [Element e]
-    : ('<' begin=NAME '>' es=elements '</' end=NAME '>' {$begin.text.equals($end.text)}?
-      {$e = new Element($begin.text, $es.es);})
-    | ('<' name=NAME '/>' {$e = new Element($name.text);})
-    ;
-
-elements returns [List<Element> es]
-    : { $es = new ArrayList<>();} (element {$es.add($element.e);})*
-    ;
-
-LT: '<';
-GT: '>';
-SLASH: '/';
-NAME:  [a-zA-Z_][a-zA-Z0-9]* ;
-
-WS  :   [ \t\n\r]+ -> skip ;
-```
-
-`PeitXML`の名の通り、属性やテキストなどは全く扱うことができず、`<a>`や`<a/>`、`<a><b></b></a>`といった要素のみを扱うことができます。規則`element`が重要です。
-
-```
-element returns [Element e]
-    : ('<' begin=NAME '>' es=elements '</' end=NAME '>' {$begin.text.equals($end.text)}?
-      {$e = new Element($begin.text, $es.es);})
-    | ('<' name=NAME '/>' {$e = new Element($name.text);})
-    ;
-```
-
-ここで空要素（`<e/>`など）に分岐するか、子要素を持つ要素（`<a><b/></a>`など）に分岐するかを決定するには、`<`に加えて、任意の長さになり得るタグ名まだ先読みしなければいけません。通常のLLパーザでは何文字（何トークン）先読みしているのは予め決定されているのでこのような文法定義を取り扱うことはできません。しかし、ANTLRの`ALL(*)`アルゴリズムとその前身となる`LL(*)`アルゴリズムでは任意個の文字数を先読みして分岐を決定することができます。
-
-ANTLRでは通常のLLパーザで文法を記述する上での大きな制約がないわけで、これは非常に強力です。理論的な意味での記述能力でも`ALL(*)`アルゴリズムは任意の決定的な文脈自由言語を取り扱うことができます。
-
-また、`ALL(*)`アルゴリズム自体とは関係ありませんが、XMLのパーザを書くときには開きタグと閉じタグの名前が一致している必要があります。この条件を記述するために`PetitXML`では次のように記述されています。
-
-```java 
-'<' begin=NAME '>' es=elements '</' end=NAME '>' {$begin.text.equals($end.text)}?
-```
-
-この中の`{$begin.text.equals($end.text)}?`という部分はsemantic predicateと呼ばれ、プログラムとして書かれた条件式が真になるときにだけマッチします。semantic predicateのような機能はプログラミング言語をそのまま埋め込むという意味で、正直「あまり綺麗ではない」と思わなくもないですが、実用上はsemantic predicateを使いたくなる場面にしばしば遭遇します。
-
-ANTLRはこういった実用上重要な痒いところにも手が届くように作られており、非常によくできた構文解析機生成系といえるでしょう。
-
-## 5.6 SComb
-
-手前味噌ですが、拙作のパーザコンビネータである[SComb](https://github.com/kmizu/scomb)も紹介しておきます。これまで紹介してきたものはすべて構文解析器生成系です。つまり、独自の言語を用いて作りたい言語の文法を記述し、そこから**対象言語**（CであったりJavaであったり様々ですが）で書かれた構文解析器を生成するものだったわけですが、パーザコンビネータは少々違います。
-
-パーザコンビネータでは対象言語のメソッドや関数、オブジェクトとして構文解析器を定義し、演算子やメソッドによって構文解析器を組み合わせることで構文解析器を組み立てていきます。パーザコンビネータではメソッドや関数、オブジェクトとして規則自体を記述するため、特別にプラグインを作らなくてもIDEによる支援が受けられることや、対象言語が静的型システムを持っていた場合、型チェックによる支援を受けられることがメリットとして挙げられます。
-
-SCombで四則演算を解析できるプログラムを書くと以下のようになります。先程述べたようにSCombはパーザコンビネータであり、これ自体がScalaのプログラム（`object`宣言）でもあります。
-
-```scala
-object Calculator extends SCombinator {
-  // root ::= E 
-  def root: Parser[Int] = E
-
-  // E ::= A
-  def E: Parser[Int] = rule(A)
-
-  // A ::= M ("+" M | "-" M)* 
-  def A: Parser[Int] = rule(chainl(M) {
-    $("+").map { op => (lhs: Int, rhs: Int) => lhs + rhs } |
-    $("-").map { op => (lhs: Int, rhs: Int) => lhs - rhs }
-  })
-
-  // M ::= P ("+" P | "-" P)* 
-  def M: Parser[Int] = rule(chainl(P) {
-    $("*").map { op => (lhs: Int, rhs: Int) => lhs * rhs } |
-    $("/").map { op => (lhs: Int, rhs: Int) => lhs / rhs }
-  })
-
-  // P ::= "(" E ")" | N
-  def P: P[Int] = rule{
-    (for {
-      _ <- string("("); e <- E; _ <- string(")")} yield e) | N
-  }
-  
-  // N ::= [0-9]+ 
-  def N: P[Int] = rule(set('0'to'9').+.map{ digits => digits.mkString.toInt})
-
-  def parse(input: String): Result[Int] = parse(root, input)
-}
-```
-
-各メソッドに対応するBNFによる規則をコメントとして付加してみましたが、BNFと比較しても簡潔に記述できているのがわかります。Scalaは記号をそのままメソッドとして記述できるなど、元々DSLに向いている特徴を持った言語なのですが、その特徴を活用しています。`chainl`というメソッドについてだけは見慣れない読者の方は多そうですが、これは
-
-```
-// M ::= P ("+" P | "-" P)* 
-```
-
-のような二項演算を簡潔に記述するためのコンビネータ（メソッド）です。パーザコンビネータの別のメリットとして、BNF（あるいはPEG）に無いような演算子をこのように後付で導入できることも挙げられます。構文規則からの値（意味値）の取り出しもScalaのfor式を用いて簡潔に記述できています。
-
-筆者は自作言語Klassicの処理系作成のためにSCombを使っていますが、かなり複雑な文法を記述できるにも関わらず、SCombのコア部分はわずか600行ほどです。それでいて高い拡張性や簡潔な記述が可能なのは、Scalaという言語の能力と、SCombがベースとして利用しているPEGという手法のシンプルさがあってのものだと言えるでしょう。
-
-## 5.7 パーザコンビネータJCombを自作しよう！
-
-コンパイラについて解説した本は数えきれないほどありますし、その中で構文解析アルゴリズムについて説明した本も少なからずあります。しかし、構文解析アルゴリズムについてのみフォーカスした本はParsing Techniquesほぼ一冊といえる現状です。その上でパーザコンビネータの自作まで踏み込んだ書籍はほぼ皆無と言っていいでしょう。読者の方には「さすがにちょっとパーザコンビネータの自作は無理があるのでは」と思われた方もいるのではないでしょうか。
-
-しかし、驚くべきことに、現代的な言語であればパーザコンビネータを自作するのは本当に簡単です。きっと、多くの読者の方々が拍子抜けしてしまうくらいに。この節ではJavaで書かれたパーザコンビネータJCombを自作する過程を通じて皆さんにパーザコンビネータとはどのようなものかを学んでいただきます。パーザコンビネータと構文解析器生成系は物凄く雑に言ってしまえば近縁種のようなものですし、パーザコンビネータの理解は構文解析器生成系の仕組みの理解にも役立つはずです。きっと。
-
-まず復習になりますが、構文解析器というのは文字列を入力として受け取って、解析結果を返す関数（あるいはオブジェクト）とみなせるのでした。これはパーザコンビネータ、特にPEGを使ったパーザコンビネータを実装するときに有用な見方です。この「構文解析器はオブジェクトである」を文字通りとって、以下のようなジェネリックなインタフェース`JParser<R>`を定義します。
-
-```java
-interface JParser<R> {
-  Result<R> void parse(String input);
-}
-```
-
-ここで構文解析器を表現するインタフェース`JParser<R>`は型パラメータ`R`を受け取ることに注意してください。一般に構文解析の結果は抽象構文木になりますが、インタフェースを定義する時点では抽象構文木がどのような形になるかはわかりようがないので、型パラメータにしておくのです。`JParser<R>`はたった一つのメソッド`parse()`を持ちます。`parse()`は入力文字列`input`を受け取り、解析結果を`Result<R>`として返します。
-
-`JParser<R>`の実装は一体全体どのようなものになるの？という疑問を脇に置いておけば理解は難しくないでしょう。次に解析結果`Result<V>`をレコードとして定義します。
-
-```java
-record Result<V>(V value, String rest){}
-```
-
-レコード`Result<V>`は解析結果を保持するクラスです。`value`は解析結果の値を表現し、`rest`は解析した結果「残った」文字列を表します。
-
-このインタフェース`JParser<R>`は次のように使えると理想的です。
-
-```java
-JParser<Integer> calculator = ...;
-Result<Integer> result = calculator.parse("1+2*3");
-assert 7 == result.value();
-```
-
-パーザコンビネータは、このようなどこか都合の良い`JParser<R>`を、BNF（あるいはPEG）に近い文法規則を連ねていくのに近い使い勝手で構築するための技法です。前の節で紹介した`SComb`もパーザコンビネータでしたが基本的には同じようなものです。
-
-この節では最終的に上のような式を解析できるパーザコンビネータを作るのが目標です。
-
-### 5.7.1 プリミティブなパーザを作ろう！
-
-これからパーザコンビネータを作っていくわけですが、パーザコンビネータの基本となる「部品」を作る必要があります。
-
-まず最初に、文字列リテラルを受け取ってそれを解析できる次のような`string()`メソッドは是非とも欲しいところです。
-
-```java
-assert new Result<String>("123", "").equals(string("123").parse("123"));
-```
-
-これはBNFで言えば文字列リテラルの表記に相当します。
-
-次に、解析に成功したとしてその値を別の値に変換するための方法もほしいところです。たとえば、`123`という文字列を解析したとして、これは最終的に文字列ではなくintに変換したいところです。このようなメソッドは、ラムダ式で変換を定義できるように、次のような`map()`メソッドとして提供したいところです。
-
-```java
-<T, U> JParser<U> map(Parser<T> parser, Function<T, U> function);
-assert (new Result<Integer>(123, "")).equals(map(string("123"), v -> Integer.parseInt(v)).parse("123"));
-```
-
-これは構文解析器生成系でセマンティックアクションを書くのに相当すると言えるでしょう。
-
-BNFで`a | b`、つまり選択を書くのに相当するメソッドも必要です。これは次のような`alt()`メソッドとして提供します。
-
-```java
-<T> JParser<T> alt(Parser<T> p1, Parser<T> p1);
-assert (new Result<String>("bar", "")).equals(alt(string("foo"), string("bar")));
-```
-
-同様に、BNFで`a b`、つまり連接」を書くのに相当するメソッドも必要ですが、これは次のような`seq()`メソッドとして提供します。
-
-```java
-record Pair<A, B>(A a, B b){}
-<T> JParser<Pair<T>> seq(Parser<T> p1, Parser<T> p2);
-assert (new Result<>(new Pair("foo", "bar"), "")).equals(seq(string("foo"), string("bar")))
-```
-
-最後に、BNFで`a*`、つまり0回以上の繰り返しに相当する`rep0()`メソッド
-
-```java
-<T> JParser<List<T>> rep0(Parser<T> p);
-assert (new Result<List<String>>(List.of(), "")).equals(rep0(string("")))
-```
-
-や`a+`、つまり1回以上の繰り返しに相当する`rep1()`メソッドもほしいところです。
-
-```java
-<T> JParser<List<T>> rep1(Parser<T> p);
-assert (new Result<List<String>>(List.of("a", "a", "a"), "")).equals(rep1(string("aaa")))
-```
-
-この節ではこれらのプリミティブなメソッドの実装方法について説明していきます。
-
-#### 5.7.1.1 `string()`メソッド
-
-まず最初に`string(String literal)`メソッドで返す`JParser<String>`の中身を作ってみましょう。`JParser`クラスはただ一つのメソッド`parser()`をもつので次のような実装になります。
-
-```java
-class JLiteralParser implements JParser<String> {
-  private String literal;
-  public JLiteralParser(String literal) {
-    this.literal = literal;
-
-  }
-  public Result<String> parse(String input) {
-    if(input.startsWith(literal)) {
-      return new Result<String>(literal, input.substring(literal.length()));
-    } else {
-      return null;
-    }
-  }
-}
-```
-
-このクラスは次のようにして使います。
-
-```java
-assert new Result<String>("foo", "").equals(new JLiteralParser("foo"));
-```
-
-リテラルを表すフィールド`literal`が`input`の先頭とマッチした場合、`literal`と残りの文字列からなる`Result<String>`を返します。そうでない場合は返すべき`Result`がないので`null`を返します。簡単ですね。あとはこのクラスのインスタンスを返す`string()`メソッドを作成するだけです。なお、使うときの利便性のため、以降では各種メソッドはクラス`JComb`のstaticメソッドとして実装していきます。
-
-```java
-public class JComb {
-  JParser<String> string(String literal) {
-    return new JLiteralParser(literal);
-  }
-}
-```
-
-使う時は次のようになります。
-
-```java
-JParser<String> foo = string("foo");
-assert new Result<String>("foo", "_bar").equals(foo.parse("foo_bar"));
-assert null == foo.parse("baz");
-```
-
-#### 5.7.1.2 `alt()`メソッド
-
-次に二つのパーザを取って「選択」パーザを返すメソッド`alt()`を実装します。先程のようにクラスを実装してもいいですが、メソッドは一つだけなのでラムダ式にします。
-
-```java
-public class JComb {
-    // p1 / p2
-    public static <A> JParser<A> alt(JParser<A> p1, JParser<A> p2) {
-        return (input) -> {
-            var result = p1.parse(input);//(1)
-            if(result != null) return result;//(2)
-            return p2.parse(input);//(3)
-        };
-    }
-}
-```
-
-ラムダ式について復習しておくと、これは実質的には以下のような匿名クラスを書いたのと同じになります。
-
-```java
-public class JComb {
-    public static <A> JParser<A> alt(JParser<A> p1, JParser<A> p2) {
-        return new JAltParser<A>(p1, p2);
-    }
-}
-
-class JAltParser<A> implements JParser<A> {
-  private JParser<A> p1, p2;;
-  public JAltParser(Parser<A> p1, Parser<A> p2) {
-    this.p1 = p1;
-    this.p2 = p2;
-  }
-  public Result<String> parse(String input) {
-    var result = p1.parse(input);
-    if(result != null) return result;
-    return p2.parse(input);
-  }
-}
-```
-
-この定義では、
-
-(1) まずパーザ`p1`を試しています
-(2) `p1`が成功した場合は`p2`を試すことなく値をそのまま返します
-(3) `p1`が失敗した場合、`p2`を試しその値を返します
-
-のような挙動をします。
-
-しかしこれはBNFというよりPEGの挙動です。そうです。実は今ここで作っているパーザコンビネータである`JComb`は（`SComb`）PEGをベースとしたパーザコンビネータだったのです。もちろん、PEGベースでないパーザコンビネータを作ることも出来るのですが実装がかなり複雑になってしまいます。PEGの挙動をそのままプログラミング言語に当てはめるのは非常に簡単であるため、今回はPEGを採用しましたが、もし興味があればBNFベース（文脈自由文法ベース）のパーザコンビネータも作ってみてください。
-
-#### 5.7.1.3 `seq()`メソッド
-
-次に二つのパーザを取って「連接」パーザを返すメソッド`seq()`を実装します。先程と同じくラムダ式にしてみます。
-
-```java
-record Pair<A, B>(A a, B b){}
-// p1 p2
-public class JComb {
-    public static <A, B> JParser<Pair<A, B>> seq(JParser<A> p1, JParser<B> p2) {
-        return (input) -> {
-            var result1 = p1.parse(input); //(1-1)
-            if(result1 == null) return null; //(1-2)
-            var result2 = p2.parse(result1.rest()); //(2-1) 
-            if(result2 == null) return null; //(2-2)
-            return new Result<>(new Pair<A, B>(result1.value(), result2.value()), result2.rest());//(2-3)
-        };
-    }
-}
-```
-
-先程の`alt()`メソッドと似通った実装ですが、p1が失敗したら全体が失敗する（nullを返す：(1-2)）のがポイントです。p1とp2の両方が成功した場合は、二つの値のペアを返しています（2-3）。
-
-#### 5.7.1.4 `rep0()`, `rep1()`メソッド
-
-残りは0回以上の繰り返し（`p*`）を表す`rep0()`と1回以上の繰り返し（`p+`）を表す`rep1()`メソッドです。
-
-まず、`rep0()`メソッドは次のようになります。
-
-```java
-public class JComb {
-    public static <A> JParser<List<A>> rep0(JParser<A> p) {
-        return (input) -> {
-            var result = p.parse(input); // (1)
-            if(result == null) return new Result<>(List.of(), input); // (2)
-            var value = result.value();
-            var rest = result.rest();
-            var result2 = rep0(p).parse(rest); //(3)
-            if(result2 == null) return new Result<>(List.of(value), rest);
-            List<A> values = new ArrayList<>();
-            values.add(value);
-            values.addAll(result2.value());
-            return new Result<>(values, result2.rest());
-        };
-    }
-}
-```
-
-(1)でまずパーザ`p`を適用しています。ここで失敗した場合、0回の繰り返しにマッチしたことになるので、空リストからなる結果を返します（(2)）。そうでなければ、1回以上の繰り返しにマッチしたことになるので、繰り返し同じ処理をする必要がありますが、これは再帰呼出しによって簡単に実装できます（(3)）。シンプルな実装ですね。
-
-
-`rep1(p)`は意味的には`seq(p, rep0(p))`なので、次のようにして実装を簡略化することができます。
-
-
-```java 
-public class JComb {
-    public static <A> JParser<List<A>> rep1(JParser<A> p) {
-        JParser<Pair<A, List<A>>> rep1Sugar = seq(p, rep0(p));
-        return (input) -> {
-            var result = rep1Sugar.parse(input);//(1)
-            if(result == null) return null;//(2)
-            var values = new ArrayList<>();
-            values.add(rep1Sugar.b());
-            values.addAll(rep1Sugar.b());
-            return new Result<>(values, result.rest()); //(3)
-        };
-    }
-}
-```
-
-実質的な本体は(1)だけで、あとは結果の値が`Pair`なのを`List`に加工しているだけですね。
-
-既に作られたパーザを加工して別の値を生成するためのメソッド`map()`を`JParser`に実装してみましょう。`map()`は`JParser<R>`のメソッドとして実装するとメソッドチェインが使えて便利なので、インタフェースの`default`メソッドとして実装します。
-
-
-```java
-interface JParser<R> {
-    Result<R> parse(String input);
-
-    default <T> JParser<T> map(Function<R, T> f) {
-        return (input) -> {
-            var result = this.parse(input);
-            if (result == null) return null;
-            return new Result<>(f.apply(result.value()), result.rest()); (1)
-        };
-    }
-}
-```
-
-(1)で`f.apply(result.value())`として値を加工しているのがポイントでしょうか。
-
-パーザを遅延評価するためのメソッド`lazy()`も導入します。Javaはデフォルトでは遅延評価を採用しない言語なので、再帰的な規則を記述するときにこのようなメソッドがないと無限に再帰してスタックオーバーフローを起こしてしまいます。
-
-```java
-public class JComb {
-    public static <A> JParser<A> lazy(Supplier<JParser<A>> supplier) {
-        return (input) -> supplier.get().parse(input);
-    }
-}
-```
-
-これで最低限の部品は出揃ったのですが、せっかくなので正規表現を扱うメソッド`regex()`も導入してみましょう。
-
-```java
-public class JComb {
-    public static JParser<String> regex(String regex) {
-        return (input) -> {
-            var matcher = Pattern.compile(regex).matcher(input);
-            if(matcher.lookingAt()) {
-                return new Result<>(matcher.group(), input.substring(matcher.end()));
+    private boolean P() {
+        // P → ( P ) P
+        if (position < input.length() && input.charAt(position) == '(') {
+            position++; // '(' を読み進める
+            if (!P()) return false;
+            if (position < input.length() && input.charAt(position) == ')') {
+                position++; // ')' を読み進める
+                return P();
             } else {
-                return null;
+                return false;
             }
-        };
+        // P → ε
+        } else {
+            // 空文字列にマッチ
+            return true;
+        }
     }
 }
 ```
 
-引数として与えられた文字列を`Pattern.compile()`で正規表現に変換して、マッチングを行うだけです。これは次のようにして使うことができます。
+クラス`Dyck`は、Dyck言語を構文解析して、成功したら`true`、そうでなければ`false`を返すものです。BNFと比較すると、
+
+- 規則の名前と一対一になるメソッドが存在する
+- 非終端記号の参照は規則の名前に対応するメソッドの再帰呼び出しとして実現されている
+
+のが特徴です。
+
+呼び出す規則を上、呼び出される規則を下とした時、上から下に再帰呼び出しが続いていくため、再帰下降構文解析と呼ばれます。このように「上から下に」構文解析を行っていくのが下向き構文解析法の特徴です。
+
+注意しなければいけないのは、下向き構文解析の方法は多数あり、その1つに再帰下降構文解析があるということです。
+
+実際、後述するLL(1)の実装のときは構文解析のための表を作り、関数の再帰呼び出しは行わないこともあります。
+
+## 5.4 上向き構文解析の概要
+
+上向き構文解析は下向き構文解析とは真逆の発想で構文解析を行います。こちらの方法は下向き型より直感的に理解しづらいかもしれません。
+
+上向き構文解析ー正確にはシフト還元構文解析として知られているものーでは、文字列を左から右に読み込んでいき、順番にスタックにプッシュしていきます。これをシフト（shift）と呼びます。
+
+シフト動作を続けていくうちに、規則の右辺の記号列とスタックトップにある記号列がマッチすれば、規則の左辺にマッチしたとして、スタックトップにある記号列を規則の左辺で置き換えます。これを還元（reduce）と呼びます。
+
+具体例を挙げてみます。以下のCFGがあったとしましょう。ただし、入力の先頭と末尾を表すために`$`を使うものとします。
+
+$$
+\begin{align*}
+D & \rightarrow \$ P \$ \\
+P & \rightarrow ( P ) P \\
+P & \rightarrow \epsilon
+\end{align*}
+$$
+
+これは下向き構文解析で扱ったDyck言語の文法です。上向き構文解析の説明の都合上、上記と等価な以下の文法を考えます。
+
+$$
+\begin{align*}
+D & \rightarrow \$ P \$ \\
+D & \rightarrow \$ \epsilon \$ \\
+P & \rightarrow P\ X  \\
+P & \rightarrow X  \\
+X & \rightarrow ( X ) \\
+X & \rightarrow ()
+\end{align*}
+$$
+
+このCFGに対して`(())`という文字列がマッチするかを判定する問題を考えてみましょう。上向き構文解析では、まず最初の「1文字」を左から右にシフトします。以下のようなイメージです。スタックに要素をプッシュすると右に要素が追加されていくものとします。
+
+$$
+\begin{align*}
+スタック： & \lbrack \$, (\ \rbrack
+\end{align*}
+$$
+
+このスタックは$`P`$にも$`D`$にもマッチしません。そこで、もう1文字をシフトしてみます。
+
+$$
+\begin{align*}
+スタック： & \lbrack \$, (, ( \rbrack
+\end{align*}
+$$
+
+まだマッチしませんね。さらにもう1文字シフトしてみます。
+
+$$
+\begin{align*}
+スタック： & \lbrack \$, (, (, \rbrack
+\end{align*}
+$$
+
+さらにもう1文字シフトしてみます。
+
+$$
+\begin{align*}
+スタック： & \lbrack \$, (, (, )\rbrack
+\end{align*}
+$$
+
+規則$`X \rightarrow ()`$を使って還元を行います。
+
+$$
+\begin{align*}
+スタック： & \lbrack \$, (, X\rbrack
+\end{align*}
+$$
+
+この状態でもう1文字シフトしてみます。
+
+$$
+\begin{align*}
+スタック： & \lbrack \$, (, X, ) \rbrack
+\end{align*}
+$$
+
+規則$`X \rightarrow (X)`$を使って還元を行います。
+
+$$
+\begin{align*}
+スタック： & \lbrack \$, X \rbrack
+\end{align*}
+$$
+
+さらに規則$`P \rightarrow X`$を使って還元を行います。
+
+$$
+\begin{align*}
+スタック： & \lbrack \$, P \rbrack
+\end{align*}
+$$
+
+文字列の末尾にきたので、`$`をシフトします。
+
+$$
+\begin{align*}
+スタック： & \lbrack \$, P, \$ \rbrack
+\end{align*}
+$$
+
+このスタックは規則$`D \rightarrow $ P $`$にマッチします。還元が行われ、最終的にスタックの状態は次のようになります。
+
+$$
+\begin{align*}
+スタック： & \lbrack D \rbrack
+\end{align*}
+$$
+
+めでたく`(())`が`D`とマッチすることがわかりました。上向き構文解析では以下の手順を繰り返していきます。
+
+1. 残りの文字があれば、入力文字をシフトしてスタックにプッシュする（シフト）
+2. スタックの記号列が規則の右辺にマッチすれば、左辺の非終端記号で置き換える（還元）
+
+4章の最後で少しだけ述べましたが、還元はちょうど、最右導出における導出の逆向きの操作になります。
+
+## 5.5 上向き構文解析のJavaによる実装
+
+このような動作をJavaコードで表現することを考えてみます。まず必要なのは、規則を表すクラス`Rule`です。問題を単純化するために、
+
+1. 規則の名前（左辺）は1文字
+2. 規則の右辺は終端記号または非終端記号のリストである
+
+とします。このようなクラス`Rule`は以下のように表現できます。
 
 ```java
-var number = regex("[0-9]+").map(v -> Integer.parseInt(v));
-assert (new Result<Integer>(10, "")).equals(number.parse("10"));
+public record Rule(char lhs, List<Element> rhs) {
+    public Rule(char lhs, Element... rhs) {
+        this(lhs, List.of(rhs));
+    }
+    public boolean matches(List<Element> stack) {
+        if (stack.size() < rhs.size()) return false;
+        for (int i = 0; i < rhs.size(); i++) {
+            Element elementInRule = rhs.get(rhs.size() - i - 1);
+            Element elementInStack = stack.get(stack.size() - i - 1);
+            if (!elementInRule.equals(elementInStack)) {
+                return false;
+            }
+        }
+        return true;
+    }
+}
 ```
 
-ここまでで作ったクラス`JComb`と`JParser`などを使っていよいよ簡単な算術式のインタプリタを書いてみましょう。仕様は次の通りです。
+可変長引数を受け取るコンストラクタは規則を簡単に記述するためのものです。`matches`メソッドはスタックの状態と規則がマッチするかを判定します。
 
-- 扱える数値は整数のみ
-- 演算子は加減乗除（`+|-|*|/`）のみ
-- `()`によるグルーピングができる
-
-実装だけを提示すると次のようになります。
+`Element`は終端記号や非終端記号を表すクラスで、以下のように定義されます。
 
 ```java
-public class Calculator {
-   public static JParser<Integer> expression() {
-        /*
-         * expression <- additive ( ("+" / "-") additive )*
-         */
-        return seq(
-                lazy(() -> additive()),
-                rep0(
-                        seq(
-                                alt(string("+"), string("-")),
-                                lazy(() -> additive())
-                        )
-                )
-        ).map(p -> {
-            var left = p.a();
-            var rights = p.b();
-            for (var right : rights) {
-                var op = right.a();
-                var rightValue = right.b();
-                if (op.equals("+")) {
-                    left += rightValue;
-                } else {
-                    left -= rightValue;
-                }
-            }
-            return left;
-        });
-    }
+public sealed interface Element 
+    permits Element.Terminal, Element.NonTerminal {
+    public record Terminal(char symbol) implements Element {}
 
-    public static JParser<Integer> additive() {
-        /*
-         * additive <- primary ( ("*" / "/") primary )*
-         */
-        return seq(
-                lazy(() -> primary()),
-                rep0(
-                        seq(
-                                alt(string("*"), string("/")),
-                                lazy(() -> primary())
-                        )
-                )
-        ).map(p -> {
-            var left = p.a();
-            var rights = p.b();
-            for (var right : rights) {
-                var op = right.a();
-                var rightValue = right.b();
-                if (op.equals("*")) {
-                    left *= rightValue;
-                } else {
-                    left /= rightValue;
-                }
-            }
-            return left;
-        });
-    }
+    public record NonTerminal(char name) implements Element {}
+}
+```
 
-    public static JParser<Integer> primary() {
-        /*
-         * primary <- number / "(" expression ")"
-         */
-        return alt(
-                number,
-                seq(
-                        string("("),
-                        seq(
-                            lazy(() -> expression()),
-                            string(")")
-                        )
-                ).map(p -> p.b().a())
+これらのクラスを使ってシフトと還元を行うクラス`Dyck`は次のように定義できます。
+
+```java
+public class Dyck {
+    private final String input;
+    private int position;
+    private final List<Rule> rules;
+
+    private final List<Element> stack = new ArrayList<>();
+
+    public Dyck(String input) {
+        this.input = input;
+        this.position = 0;
+        this.rules = List.of(
+            // D → $ P $
+            new Rule('D', new Terminal('$'), new NonTerminal('P'), new Terminal('$')),
+            // D → $ ε $
+            new Rule('D', new Terminal('$'), new Terminal('$')),
+            // P → P X
+            new Rule('P', new NonTerminal('P'), new NonTerminal('X')),
+            // P → X
+            new Rule('P', new NonTerminal('X')),
+            // X → ( X )
+            new Rule('X', new Terminal('('), new NonTerminal('X'), new Terminal(')')),
+            // X → ()
+            new Rule('X', new Terminal('('), new Terminal(')'))
         );
     }
-    
-    // number <- [0-9]+
-    private static JParser<Integer> number = regex("[0-9]+").map(Integer::parseInt);
+
+    public boolean parse() {
+        stack.add(new Terminal('$'));
+        while (true) {
+            if (!tryReduce()) {
+                if (position < input.length()) {
+                    stack.add(new Terminal(input.charAt(position)));
+                    position++;
+                } else {
+                    break;
+                }
+            }
+        }
+        stack.add(new Terminal('$'));
+        while (tryReduce()) {
+            // 還元を試みる
+        }
+        return stack.size() == 1 && stack.get(0).equals(new NonTerminal('D'));
+    }
+
+    private boolean tryReduce() {
+        for (Rule rule : rules) {
+            if (rule.matches(stack)) {
+                for (int i = 0; i < rule.rhs().size(); i++) {
+                    stack.remove(stack.size() - 1);
+                }
+                stack.add(new NonTerminal(rule.lhs()));
+                return true;
+            }
+        }
+        return false;
+    }
 }
 ```
 
-コメントに対応するPEGを付加してありますが、表記は冗長なもののほぼPEGに一対一に対応しているのがわかるのではないでしょうか？
+このプログラムでは、入力文字列を1文字ずつシフトしながら、還元を行っています。規則にマッチする場合はスタックから右辺の要素を取り除き、左辺の非終端記号をプッシュします。最終的にスタックに`NonTerminal('D')`だけが残れば、入力文字列が文法に従っていることが確認できます。
 
-これに対してJUnitを使って以下のようなテストコードを記述してみます。無事、意図通りに解釈されていることがわかります。
+## 5.6 下向き構文解析と上向き構文解析の比較
 
-```java
-assertEquals(new Result<>(7, ""), expression().parse("1+2*3")); // テストをパス
+下向き構文解析法と上向き構文解析法は得手不得手があります。
+
+下向き型は規則と関数を対応付けるのが容易なので手書きの構文解析器を書くのに向いています。実際、驚くほど多くのプログラミング処理系の構文解析器は手書きの再帰下降構文解析で実装されています。
+
+下向き型は、関数の引数として現在の情報を渡して、引数に応じて構文解析の結果を変化させることが比較的容易です。これは文脈に依存した文法を持った言語を解析するときに有利な性質です。しかし、下向き型は左再帰という形の文法をそのまま処理できないという欠点があります。
+
+たとえば、以下のBNFは上向き型だと普通に解析できますが、工夫なしに下向き型で実装すると無限再帰に陥ってスタックオーバーフローします。
+
+```
+A = A "a"
+A = "";
 ```
 
-結果として見ると、さすがにDSLに向いたScalaに比べれば大幅に冗長になったものの、手書きで再帰下降パーザを組み立てるのに比べると大幅に簡潔な記述を実現することができました。しかも、JComb全体を通しても500行にすら満たないのは特筆すべきところです。Javaがユーザ定義の中置演算子をサポートしていればもっと簡潔にできたのですが、そこは向き不向きといったところでしょうか。
+このような問題を下向き型で解決する方法も存在します。
 
-このように、パーザコンビネータを使うと、手書きでパーザを書いたり、あるいは、対象言語に構文解析器生成系がないようなケースでも、比較的気軽にパーザを組み立てるためのDSL（Domain Specific Language）を定義できるのです。また、それだけでなく、特にJavaのような静的型付き言語を使った場合ですが、IDEによる支援も受けられますし、BNFやPEGにはない便利な演算子を自分で導入することもできます。
+たとえば、上の文法を以下のように書き換えれば下向き型でも問題なく解析できるようになります。このような処理を左再帰の除去と呼びます。
 
-パーザコンビネータはお手軽なだけあって各種プログラミング言語に実装されています。たとえば、Java用なら[jparsec](https://github.com/jparsec/jparsec)があります。しかし、筆者としては、パーザコンビネータが動作する仕組みを理解するために、是非とも**自分だけの**パーザコンビネータを実装してみてほしいと思います。
+通常のプログラミング言語でも直線的な再帰は常にループに変換可能ですが、原理的にはそれと似たようなものです。
+
+```
+A = "a" A
+  | "";
+```
+
+さて、上向き型は左再帰を問題なく処理できるので、このような文法をそのまま解析できるわけです、では上向き型はすべての文法に対して有利なのでしょうか？ことはそう単純ではありません。
+
+たとえば、それまでの文脈に応じて構文解析のルールを切り替えたくなることがあります。最近の言語によく搭載されている文字列補間などはその最たる例です。
+
+`"`の中は文字列リテラルとして特別扱いされますが、その中で`#{`が出てきたら（Rubyの場合）、通常の式を構文解析するときのルールに戻る必要があります。
+
+このように、文脈に応じて適用するルールを切り替えるのは下向き型が得意です。もちろん、上向き型でも実現できないわけではありません。実際、Rubyの構文解析機はYaccの定義ファイルから生成されるようになっていますが、Yaccが採用しているのは代表的な上向き構文解析法である`LALR(1)`です。
+
+ともあれ、下向きと上向きには異なる利点と欠点があります。
+
+次からは具体的なアルゴリズムの説明に移ります。
+
+## 5.7 LL(1) - 代表的な下向き構文解析アルゴリズム
+
+下向き型構文解析法の中でおそらくもっとも古典的で、よく知られているのは`LL(1)`法です。`LL`は**Left-to-right, Leftmost derivation**の略で、左から右へ文字列をスキャンしながら**最左導出**を行うことを意味しています。最左導出は第4章で説明しましたね。
+
+`LL(1)`の`1`は「1トークン先読み」を意味しています。つまり、`LL(1)`法は、次の1トークンを見て、最左導出を行うような構文解析手法です。この手法は手書きの**再帰下降構文解析**によって簡単に実装できるため、構文解析手法の中でも単純なものと言えるでしょう。字面が一見小難しく見えますが、`LL(1)`のアイデアは意外に簡単なものです。
+
+たとえば、以下のようなJava言語のif文があったとします。
+
+```java
+if(age < 18) {
+    System.out.println("18歳未満です");
+} else {
+    System.out.println("18歳以上です");
+}
+```
+
+我々はどのようにしてこれを見て「if文がある」と認識するのでしょうか。もちろん「人それぞれ」なのですが、最初にキーワード`if`が現れたからif文だと考える人も多いのではないかと思います。
+
+`LL(1)`構文解析アルゴリズムはまさにこのイメージを元にした手法です。プログラムをトークン列に区切った後に、「最初の1トークン」を見て、「これはif文だ」とか「これはwhile文だ」とか認識するようなものですね。
+
+イメージとしては簡単なのですが、アルゴリズムとして実行可能なようにするためには考えなければいけない論点がいくつかあります。以下では、`LL(1)`を実装するに当たって考えなければいけない課題について論じます。
+
+### 課題1 - ある構文の最初のトークンが複数種類ある場合
+
+先程の例ではある構文、たとえばif文が始まるには`if`というキーワードが必須で、それ以外の方法でif文が始まることはありえませんでした。
+
+つまり、`if`というトークンが先頭に来たら、それはif文であると確定できるわけです。
+
+しかし、問題はそう単純ではありません。if文の他に符号付き整数および加減乗除のみからなる算術式を構文解析をすることを考えてみましょう。
+
+算術式は以下のいずれかで始まります。
+
+- `(`
+- `-`
+- `+`
+- 整数リテラル（`<int_literal>`）
+
+つまり、算術式の始まりは複数のトークンで表されます。このような場合、最初のトークンとの一致比較だけでは「これは算術式だ」と確定できません。
+
+あるトークンが算術式の始まりである事を確定するためには、トークンの集合という概念が必要になります。
+
+たとえば、算術式の始まりは以下のようなトークンの集合で表されます。
+
+```text
+{"(", "-", "+", <int_literal>}
+```
+
+このように、ある構文が始まるかを決定するために必要なトークンの集合のことを**FIRST集合**と呼びます。
+
+**FIRST集合**は非終端記号ごとに定義されます。以降では、非終端記号`N`に対して定義されるFIRST集合を`FIRST(N)`と表します。
+
+たとえば、規則$A$の右辺が複数あって以下のようになっているとします。
+
+$$
+\begin{array}{l}
+A \rightarrow B \\
+A \rightarrow C
+\end{array}
+$$
+
+このとき、
+
+$$
+\begin{array}{l}
+FIRST(B) \cap FIRST(C) = \emptyset
+\end{array}
+$$
+
+が成り立てば、先頭１トークンだけを「先に見て」$B$を選ぶか$C$を選ぶかを安全に決定することができます。
+
+この「先を見る」（Lookahead）という動作がLL(1)のキモです。
+
+バックトラックしない下向き型の場合「あ。間違ってたので別の選択肢をためそう」ということができませんから、必然的に一つ先を読んで分岐する必要があるのです。
+
+一つ先を読んで安全に分岐を選べるためには、分岐の先頭にあるトークンがお互いに重なっていないことが必要条件になります。この「お互いに重なっていない」というのが、
+
+$$
+\begin{array}{l}
+FIRST(B) \cap FIRST(C) = \emptyset
+\end{array}
+$$
+
+であらわされる条件です。
+
+### 課題2 - 省略可能な要素の扱い
+
+if文であるかどうかは、先頭の1トークンを見ればわかります。しかし、if文であるとして、if-else文なのかelseがない単純なif文であるかどうかを判定するのはどうすればいいでしょうか。たとえば、以下の文は正当です。
+
+```java
+if (age < 18) {
+    System.out.println("18歳未満です");
+}
+```
+
+以下の文も正当です。
+
+```java
+if (age < 18) {
+    System.out.println("18歳未満です");
+} else {
+    System.out.println("18歳以上です");
+}
+```
+
+最初のif文の後に、
+
+- 前者はelseが出現しない
+- 後者はelseが出現する
+
+という違いがあります。
+
+つまり、elseが出現するかどうかで、どの規則を適用するかを決定する必要があります。このような場合、次のトークンを見て、elseならif-else文、そうでなければ単純なif文と解釈します。
+
+この判断を行うためには**FIRST集合**だけでは不十分です。elseが省略される可能性があるためです。elseが省略可能かどうかを示す情報が必要です。
+
+ある要素が省略可能かどうかを示す情報を**nullable**と呼びます。**nullable**は非終端記号が空文字列を生成可能かどうかを示す情報です。たとえば、以下の規則があるとします。
+
+$$
+A → a \\
+A → b \\
+A → ε \\
+$$
+
+$A$は空文字列を生成可能です。このような場合、$A$はnullableであると言います。
+
+さて、この言い方に従うと
+
+```java
+else {
+    System.out.println("18歳以上です");
+}
+```
+
+この部分は**nullable**であると言えます。
+
+このような**nullable**な要素の次に出現し得るトークンの集合を**FOLLOW集合**と呼びます。**FOLLOW集合**は非終端記号ごとに定義されます。以降では、非終端記号$N$に対して定義される**FOLLOW集合**を$FOLLOW(N)$と表します。
+
+次の項では、**FIRST集合**と**FOLLOW集合**の概念についてより厳密に説明します。
+
+### FIRST集合とFOLLOW集合の計算
+
+LL(1)をアルゴリズムとしてきちんと定義しようとするなら、この二つの概念が必要であることはわかってもらえたのではないかと思います。しかし、この二つですが、プログラム上でどう計算すれば良いのでしょうか？この問いに答えることがLL(1)アルゴリズムをきちんと理解することであり、逆にきちんと理解できれば、自力でLL(1)アルゴリズムによるパーサを記述できるようになるでしょう。
+
+まずはFIRST集合について考えてみます。単純化のために以下のような規則を仮定します。
+
+$$
+A \rightarrow \alpha_1 \\
+A \rightarrow \alpha_2 \\
+... \\
+A \rightarrow \alpha_n \\
+$$
+
+$\alpha_i$は終端記号や非終端記号の並びです。$FIRST(A)$を求めるには以下の手順を用います。
+
+1. FIRST集合を空集合に初期化する。
+2. 各生成規則$`A \rightarrow \alpha_i`$について、次を行う：
+ - $\alpha_i$の最初の記号$X_1$が終端記号ならば、FIRST(A)に$X_1$を追加する。
+ - $X_1$が非終端記号の場合、$FIRST(X1)$を計算し、$FIRST(A)$に$FIRST(X1)$を追加する。
+ - $X_1$が$nullable$である場合、次の記号$X_2$について同様の処理を行う。
+
+$nullable$については先程軽く述べましたが、ある非終端記号が空文字列を生成可能かどうかを示すものです。$nullable$の計算は以下の手順で行います。
+
+1. 全ての非終端記号をfalse（nullableでない）に初期化する。
+2. 生成規則$`A \rightarrow \alpha`$について、$`\alpha`$が空（ε）なら$nullable(A)$をtrueに設定する。
+3. 生成規則$`A \rightarrow \alpha`$（$\alpha = \beta_1 \beta_2 ... \beta_n$）について、$\beta_1 ... \beta_n`$が全て$nullable$なら$nullable(A)$をtrueに設定する。
+4. 値が変化しなくなるまで2と3を繰り返す。
+
+次に**FOLLOW集合**の計算です。$FOLLOW(A)$は、非終端記号$A$の後に現れる可能性のある終端記号の集合です。計算手順は以下の通りです。
+
+1. FOLLOW集合を空集合に初期化する。
+2. 開始記号のFOLLOW集合に入力の終端記号$を追加する。
+3. 各生成規則$`B \rightarrow \alpha A \beta`$について、以下を行う：
+  -  $`FIRST(β)`$からεを除いたものを$FOLLOW(A)$に追加する。
+  - $nullable(\beta)$ならば、$FOLLOW(B)$を$FOLLOW(A)$に追加する。
+4. 値が変化しなくなるまで3を繰り返す。
+
+この$FIRST$と$FOLLOW$を用いて、LL(1)構文解析表を作成します。
+
+### LL(1)構文解析表の作成
+
+構文解析表は、非終端記号と入力の次のトークン（終端記号）の組み合わせで、次にどの生成規則を適用すべきかを示すものです。構文解析表の作成手順は以下の通りです。
+
+1. 各生成規則$`A \rightarrow α`$について、次を行う：
+  - $`FIRST(α)`$からεを除いた全ての終端記号aに対して、表の項目$`[A, \alpha]`$に規則$`A \rightarrow \alpha`$を入れる。
+  - もし$`ε \in FIRST(α)`$なら、$`FOLLOW(A)`$の全ての終端記号$\beta$に対して、表の項目$`[A, \beta]`$に規則$`A \rightarrow α`$を入れる。
+2. 構文解析表において、同じ項目に複数の規則が入る場合、その文法はLL(1)ではない
+
+つまり、LL(1)構文解析表が作成できるかどうかは、その文法がLL(1)であるかどうかの判定に等しいと言えます。
+
+### LL(1)の問題点と限界
+
+`LL(1)`は古典的でありかつ実用的でもありますが、アルゴリズムがシンプルである故の問題点や限界も存在します。この節では`LL(1)`の抱える問題点について述べます。
+
+### 問題点1 - 最初の1トークンで構文要素を決められないことがある
+
+例えば、以下の文法を考えてみましょう。
+
+$$
+\begin{array}{lll}
+S & \rightarrow & a B \\
+S & \rightarrow & a C \\
+B & \rightarrow & b \\
+C & \rightarrow & c
+\end{array}
+$$
+
+$S$の最初のトークンは常に$a$で、その次のトークンが$b$なら$B$を、$c$なら$C$を選択します。最初の1トークンだけではどちらの規則を適用すべきか決められません。
+
+この問題は**左因子化**（left factoring）によって解決できます。左因子化では共通部分をくくり出すことで、LL(1)で解析可能な文法に変換します。
+
+$$
+\begin{array}{lll}
+S  & \rightarrow & a S' \\
+S' & \rightarrow & A \\
+S' & \rightarrow & B \\
+B  & \rightarrow & b \\
+C  & \rightarrow & c
+\end{array}
+$$
+
+しかし、左因子化は常に適用できるわけではありません。
+
+### 問題点2 - 左再帰の問題
+
+$LL(1)$では左再帰を含む文法を扱うことができません。例えば、以下の文法は左再帰を含んでいます。
+
+$$
+\begin{array}{lll}
+E  & \rightarrow & E\ +\ T \\
+E  & \rightarrow & T \\
+\end{array}
+$$
+
+この文法はEの定義の最初にE自身が出現しています。左再帰を除去することでLL(1)で扱えるように変換できます。
+
+$$
+\begin{array}{lll}
+E  & \rightarrow T\ E'\\
+E' & \rightarrow +\ T\ E'\\
+E' & \rightarrow \epsilon \\
+\end{array}
+$$
+
+左再帰の除去は多くの場合に可能ですが、変換作業が煩雑になることも少なくありません。
+
+## 5.8 LL(k) - LL(1)の拡張
+
+LL(1)の限界を克服するために、LL(k)という概念が導入されました。kは先読みするトークン数を示します。kを増やすことで、より複雑な文法を扱えるようになりますが、解析表のサイズや計算量が増加します。
+
+しかし、LL(k)でもすべての文脈自由言語を扱えるわけではありません。たとえば、文脈自由言語の例として以下のようなものがあります。
+
+$$
+a^i b^j (i >= j >= 1)
+$$
+
+これは$a$が$i$回あらわれてその後に$b$が$j$回あらわれるような言語ですが、$LL(k)$言語ではありません。後述しますが、$LR(1)$言語にはなるので、純粋に言語としての表現能力を考えると$LL(k)$は$LR(1)$よりも弱い言語であると言えます。
+
+## 5.9 SLR - 単純な上向き構文解析アルゴリズム
+
+SLR（Simple LR）は、LR法の中でも最も単純な手法です。LRは**L**eft-to-right（左から右への入力）と**R**ightmost derivation（最右導出）の略です。 Left-to-rightは「左から右に文字列を読み込む」を指します。これは直感的にわかりやすいでしょう。Rightmost derivationは「最右導出を行う」という意味です。
+
+最右導出については第4章で説明しましたが、簡単に復習しておきましょう。最右導出は文法規則を適用していく際に、常に右側から展開していくことを指します。たとえば、以下の文脈自由文法を考えてみましょう：
+
+$$
+S -> aSSb | c
+$$
+$$
+\begin{array}{lll}
+S  & \rightarrow aSSb\\
+S  & \rightarrow c\\
+\end{array}
+$$
+
+この文法に対して、最右導出で`accb`という文字列を生成する過程は以下のようになります：
+
+$$
+\begin{align*}
+S & \Rightarrow aSSb & (S \rightarrow aSSbを適用) \\
+aSSB & \Rightarrow aScb & (S \rightarrow cを適用) \\
+aScb & \Rightarrow accb & (S \rightarrow cを適用)
+\end{align*}
+$$
+
+第4章で説明したように、$S$を展開するときに、一番右の$S$を展開していますね。これが「最右導出」ということです。最右導出の過程を逆にたどることが `SLR`ひいては`LR`法の基本的な考え方です。
+
+もちろん、これだけだとわけがわからないという方が大半ではないかと思います。しかし、読者の皆さんがこの章で既に見たシフト還元構文解析が理解できていれば、その入口に立ったようなものです。
+
+なぜなら、シフト還元構文解析の「シフト」が上でいうLeft-to-right、「還元」がRightmost derivationに対応しているからです。シフトは左から右に文字列を読み込むことを意味し、還元は最右導出の逆を行うことを意味します。SLRはシフト還元構文解析の考え方をより厳密に定式化したものと言えるでしょう。
+
+しかし、素朴なシフト還元構文解析とSLR法が大きく異なる点があります。
+
+それは構文解析表と呼ばれる表を用いてシフトするか還元するかを決定する点です。素朴なシフト還元構文解析ではスタックを毎回スキャンしていましたが、これではスタックのサイズが大きくなってきたときに遅くなるのが想像できますね。
+
+一方、SLRでは構文解析表を使ってシフトするか還元するかを決定するため、効率的に構文解析を行うことができます。
+
+では、SLRではどのように構文解析表を作り出すのでしょうか？そのための道具立てを次節以降で説明します。
+
+### LR(0)項
+
+SLRでは、文法規則を`LR(0)項`（以下、単に項と書きます）という形に変換します。項は規則の右辺にドット（・）を挿入したものです。たとえば：
+
+```
+E -> E + T
+```
+
+この規則に対して、以下のような項を作ることができます：
+
+```
+E -> . E + T,
+```
+
+ドットは現在の解析位置を示します。1つの項は構文解析の途中経過を表すものと見ることができます。この項はEの右辺の最初の記号を読み込もうとしている状態です。
+
+さらに、項集合という概念を導入します。規則
+
+```
+E -> E + T
+```
+
+から得られる項の集まりは以下のようになります：
+
+```
+1. E -> . E + T
+2. E -> E . + T
+3. E -> E + . T
+4. E -> E + T .
+```
+
+ある規則から得られる項集合は、その規則の左辺に対応する構文解析の途中状態の集合と見ることができます。この規則の右辺は3つの要素からなるため、4つの項が得られます。
+
+よりわかりやすく言うなら、4つの項は以下のような状態を表しています：
+
+1. Eの右辺の最初の記号を読み込もうとしている
+2. Eの右辺の最初の記号を読み込んだ後、+を読み込もうとしている
+3. Eの右辺の最初の記号と+を読み込んだ後、Tを読み込もうとしている
+4. Eの右辺の最初の記号と+とTを読み込んだ後。還元しようとしている
+
+### 状態の構築
+
+SLRでは、項目の集合を「状態」として扱います。初期状態から始めて、遷移を繰り返すことで全ての状態を構築します。
+例として、以下の簡単な文法を考えてみましょう：
+
+```text
+{
+  S -> E,
+  E -> E + T | T,
+  T -> x
+}
+```
+
+この文法に対して入力を解析するときの初期状態は以下のようになります：
+
+```text
+{
+  S -> . E,
+  E -> . E + T,
+  E -> . T,
+  T -> . x
+}
+```
+
+この状態から、各記号（E, T, x）に対する遷移を考えます。例えば、xに対する遷移は以下のようになります：
+
+```
+{
+  S -> . E,
+  E -> . E + T,
+  E -> . T,
+  T -> x .
+}
+```
+
+遷移元の状態、つまり項集合と比較して、最後の項がxを読み込んでいる状態になっていることがわかります。このようにして、各記号に対する遷移を考えていくことで、全ての状態を構築していきます。
+
+### 閉包（Closure）
+
+状態を構築する際、ある非終端記号に対する項目がある場合、その非終端記号から始まる全ての規則も状態に含める必要があります。これを閉包操作と呼びます。
+
+閉包操作は以下の手順で行います：
+
+1. 現在の状態に含まれる全ての項について、ドットの直後にある非終端記号を取得
+2. その非終端記号に対応する全ての規則を取得
+3. それらの規則を新しい項として状態に追加
+4. 項集合が変化しなくなるまで、1から3を繰り返す
+
+### GOTO関数
+
+SLR（Simple LR）法において、GOTO関数は構文解析器の中心的な役割を果たす重要な概念です。GOTO関数は、現在の状態と入力記号に基づいて次の状態を決定する関数です。具体的には、ある状態から特定の記号を「読む」（読むとはその記号に関連するシフトまたは非終端記号の展開を意味します）ことで遷移する先の状態を指し示します。
+
+GOTO関数は次のように定義されます：
+
+```text
+GOTO(I, X) = J
+```
+
+ここで、
+
+- I は現在の状態（項目集合）
+- X は遷移の基となる記号（終端記号または非終端記号）、
+- J は遷移後の状態（新しい項目集合）
+
+です。
+
+#### GOTO関数の計算方法
+
+GOTO関数を計算するためには、現在の状態Iに含まれる項目に対して、特定の記号Xがドット（・）の直後に現れるものを探し、そのドットを1つ右に移動させた新しい項目を生成します。これらの新しい項目の閉包を取り、その結果が遷移後の状態Jとなります。
+
+具体的な手順は以下の通りです：
+
+1. 項目の選択： 現在の状態Iに含まれるすべての項目`A → α・Xβ`を選びます。Xは終端記号または非終端記号です。
+2. ドットの移動： 選択した各項目について、ドットを1つ右に移動させた項目`A → αX・β`を生成します。
+3. 閉包の計算： 生成した新しい項目集合に対して閉包操作を行います。これは、非終端記号 β が現れた場合、その非終端記号に関連するすべての規則を追加する操作です。
+4. 新しい状態の確定： 閉包操作後の項目集合が新しい状態Jとなります。
+
+#### 例でみるGOTO関数の適用
+
+具体的な文法と項目集合を用いてGOTO関数の動作を確認してみましょう。
+
+##### 文法：
+
+```text
+S -> E
+E -> E + T
+E -> T
+T -> id
+```
+
+##### 項目集合の例：
+
+例えば、ある状態 I が以下の項目を含んでいるとします：
+
+```text
+1. S -> . E
+2. E -> . E + T
+3. E -> . T
+4. T -> . id
+```
+
+この状態Iに対して、記号Eに対するGOTO関数`GOTO(I, E)`を計算してみます。
+
+1. 項目の選択：
+
+- `S -> . E` （ドットの直後が E）
+- `E -> . E + T` （ドットの直後が E）
+
+2. ドットの移動：
+
+- `S -> E .`
+- `E -> E . + T`
+
+3. 閉包の計算：
+
+- `S -> E .`はドットが右端にあるため、閉包には新たな項目は追加されません。
+- `E -> E . + T`はドットの直後が + なので、閉包には新たな項目は追加されません。
+
+したがって、GOTO関数 GOTO(I, E) によって生成される新しい状態 J は以下の項目を含みます：
+
+```text
+1. S → E .
+2. E → E . + T
+```
+
+のように、GOTO関数は現在の状態と特定の記号に基づいて新しい状態を導出します。
+
+### 構文解析表
+
+SLR法における構文解析表は、構文解析器が入力を解析する際に必要なアクション（シフト、還元、受理、エラー）を決定するための表です。この表は、各状態と各入力記号の組み合わせに対して、どのアクションを取るべきかを示します。
+
+構文解析表は主に2つの部分から構成されます：
+
+1. ACTION表：終端記号に対するアクションを示す部分。
+2. GOTO表：非終端記号に対する次の状態を示す部分。
+
+#### 構文解析表の作成手順
+
+構文解析表を作成する手順は以下の通りです：
+
+TBD
+
+### 構文解析の実行
+
+構文解析表を使って、実際の入力文字列を解析します。スタックと入力バッファを用いて、以下の操作を繰り返します：
+
+- 現在の状態と次の入力記号に基づいて、構文解析表からアクションを決定
+- アクションにしたがって、シフトまたは還元を実行
+- 受理に到達したら解析成功、エラーが発生したら解析失敗
+
+### 具体例
+
+TBD
+
+このように、SLR(0)法では構文解析表を参照しながら、入力文字列を左から右に読み込み、適切なタイミングでシフトと還元を繰り返すことで構文解析を行います。
+SLR(0)法は比較的単純ですが、扱える文法に制限があります。次にSLR(0)を拡張して先読みを考慮したSLR(1)法について説明します。
+
+## 5.10 SLR(1) - 先読みを考慮した上向き構文解析アルゴリズム
+
+SLR(1)（Simple LR(1)）法は、SLR(0)法を先読み情報で強化した上向き構文解析アルゴリズムです。SLR(1)法では、LR(0)項目集合を用いて状態を構築し、さらに文法のFOLLOW集合を利用して解析表を作成します。これにより、LR(0)法で生じるシフト・還元（shift-reduce）コンフリクトや還元・還元（reduce-reduce）コンフリクトを解消することが可能になります。
+
+### 構文解析表の作成方法
+
+それでは、SLR(1)法における構文解析表の作成手順を詳しく説明していきましょう。
+
+#### 手順1: LR(0)項目集合の構築
+
+まず、与えられた文法についてLR(0)項目集合を構築します。LR(0)項目は、ドット（・）の位置で解析の進行状況を示すものでしたね。この項目集合と状態遷移を構築する際には、前節で説明した閉包とGOTO関数を用います。
+
+#### 手順2: FOLLOW集合の計算
+
+次に、各非終端記号のFOLLOW集合を計算します。FOLLOW集合とは、ある非終端記号の直後に現れうる可能性のある終端記号の集合です。計算手順は以下の通りです。
+
+1. 各非終端記号のFOLLOW集合を空集合に初期化します。
+2. 開始記号のFOLLOW集合に入力の終端記号$を追加します。
+3. 各生成規則`A → αBβ`について、`FIRST(β)`からεを除いたものを`FOLLOW(B)`に追加します。
+4. もしβがε（空文字列）に導出可能であれば、`FOLLOW(A)`を`FOLLOW(B)`に追加します。
+5. 値が変化しなくなるまで、ステップ3と4を繰り返します。
+
+#### 手順3: 構文解析表（ACTION表とGOTO表）の作成
+
+ACTION表とGOTO表を以下の手順で作成します。
+
+#### ACTION表の作成
+
+1. シフト動作の設定
+
+状態Iにおいて、項目`[A → α・aβ]`が含まれている場合、かつaが終端記号であるとき、`GOTO(I, a) = J`であれば、ACTION表の`(I, a)`にshift Jを設定します。
+
+2. 還元動作の設定
+
+状態Iにおいて、項目`[A → α・]`（ドットが右端にある項目）が含まれている場合、`A → α`の規則番号をrとします。このとき、`FOLLOW(A)`に含まれる全ての終端記号aに対して、ACTION表の`(I, a)`に`reduce r`を設定します。
+
+3. 受理動作の設定
+
+状態Iにおいて、項目`[S' → S・]`（S'は拡張した開始記号）が含まれている場合、ACTION表の`(I, $)`にacceptを設定します。
+
+##### GOTO表の作成
+
+状態Iにおいて、非終端記号Aに対して`GOTO(I, A) = J`が定義されている場合、GOTO表の`(I, A)`にJを設定します。
+
+#### 手順4: コンフリクトの検出
+
+構文解析表を作成した後、以下のコンフリクトがないか確認します。
+
+- シフト・還元コンフリクト：同じセルにshiftとreduceが存在する場合。
+- 還元・還元コンフリクト：同じセルに複数のreduceが存在する場合。
+
+これらのコンフリクトがなければ、その文法はSLR(1)文法であり、SLR(1)構文解析器を構築できます。コンフリクトがある場合は、文法を変更するか、より強力なLR(1)法やLALR(1)法を検討する必要があります。
+
+### 具体例
+
+具体的な例を用いて、SLR(1)法の構文解析表の作成手順を示します。
+
+以下の文法を考えます。
+
+```
+1. E → E + T
+2. E → T
+3. T → T * F
+4. T → F
+5. F → ( E )
+6. F → id
+```
+
+この文法は四則演算の式を表現しています。
+
+#### ステップ1：LR(0)項目集合の構築
+
+各項目集合（状態）を構築します。TBD
+
+#### ステップ2：FOLLOW集合の計算
+
+各非終端記号のFOLLOW集合を計算します。
+
+- FOLLOW(E) = `{ ), $ }`
+- FOLLOW(T) = `{ +, ), $ }`
+- FOLLOW(F) = `{ *, +, ), $ }`
+
+##### ステップ3：構文解析表の作成
+
+各状態に対して、ACTION表とGOTO表を作成します。
+
+- シフト動作：項目`[A → α・aβ]`に基づいて設定。
+- 還元動作：項目`[A → α・]`とFOLLOW(A)に基づいて設定。
+
+##### ステップ4：コンフリクトの検出
+
+作成した構文解析表を確認し、コンフリクトがないことを確認します。この文法では、SLR(1)法でコンフリクトなく解析可能です。
+
+#### SLR(1)法の利点と限界
+
+SLR(1)法は、SLR(0)法よりも多くの文法を扱える一方、LR(1)法よりは弱い解析能力しか持ちません。SLR(1)法でコンフリクトが発生する場合、LR(1)法やLALR(1)法を検討する必要があります。
+
+## 5.11 LR(1) - 項目集合に先読みを追加したSLR(1)の拡張
+
+LR(1)法は、SLR(1)法をさらに強化した上向き構文解析アルゴリズムです。LR(1)法では、各項目に**先読み記号（lookahead）**を付加します。これにより、解析中の文脈をより正確に把握し、コンフリクトを解消することが可能になります。
+
+### LR(1)項目
+
+LR(1)法では、項目は以下の形式で表されます。
+
+```text
+[A → α・β, a]
+```
+
+- A → αβ：文法規則
+- ・：ドット（現在の解析位置）
+- a：先読み記号（終端記号または終端記号の集合）
+
+この項目は、「αを既に解析し、次にβを解析しようとしている。さらに、入力の先頭にaが現れることを期待する」という意味を持ちます。
+
+### LR(1)項目集合の構築
+
+LR(1)項目集合を構築するために、以下の手順を踏みます。
+
+#### 手順1: 初期項目の作成
+
+開始記号S'に対して、初期項目`[S' → ・S, $]`を作成します。ここで、$は入力の終端記号を表します。
+
+#### 手順2: LR(1)閉包（closure）の計算
+
+項目集合Iの閉包closure(I)を以下の手順で計算します。
+
+1. `closure(I) = I`とする。
+2. `closure(I)`に新しい項目が追加されなくなるまで、以下を繰り返す。
+  - `closure(I)`内の各項目`[A → α・Bβ, a]`について、Bが非終端記号であれば、Bのすべての規則`B → γ`に対して、`FIRST(βa)`に含まれる全ての終端記号bについて、項目`[B → ・γ, b]`を`closure(I)`に追加する。
+
+#### 手順3: GOTO関数の計算
+
+項目集合`I`と記号`X`に対して、`GOTO(I, X)`は以下の項目からなる集合の閉包です。
+
+- I内の項目`[A → α・Xβ, a]`に対して、`[A → αX・β, a]`を集めた集合の閉包。
+
+#### 手順4: LR(1)項目集合の全体構築
+
+初期項目集合から出発し、GOTO関数を用いて新たな項目集合を構築します。この過程を新しい項目集合が生まれなくなるまで繰り返します。
+
+### LR(1)構文解析表の作成
+
+LR(1)項目集合を用いて、構文解析表（ACTION表とGOTO表）を作成します。
+
+#### ACTION表の作成
+
+1. シフト動作の設定
+
+状態Iにおいて、項目`[A → α・aβ, b]`が含まれている場合、aが終端記号であれば、`GOTO(I, a) = J`として、ACTION表の`(I, a)`に`shift J`を設定します。
+
+2. 還元動作の設定
+
+状態Iにおいて、項目`[A → α・, a]`（ドットが右端にある項目）が含まれている場合、`A → α`の規則番号をrとして、ACTION表の`(I, a)`にreduce rを設定します。
+
+3. 受理動作の設定
+
+状態Iにおいて、項目`[S' → S・, $]`が含まれている場合、ACTION表の`(I, $)`に`accept`を設定します。
+
+### GOTO表の作成
+
+GOTO表の作成方法はSLR(1)法と同様です。
+
+### LR(1)法の利点と欠点
+
+#### 利点
+
+- 強力な解析能力：LR(1)法は、すべてのLR(1)文法を解析可能であり、SLR(1)法やLALR(1)法で解析できない文法も扱えます。
+- コンフリクトの解消：先読み記号を明示的に扱うことで、コンフリクトを細かく解消できます。
+
+#### 欠点
+
+解析表のサイズが大きい：LR(1)項目集合は非常に大きくなる傾向があり、解析表も巨大になります。これにより、実用上のメモリ消費や処理時間が問題となる場合があります。
+
+### 具体例
+
+簡単な文法を用いて、LR(1)項目集合と解析表の作成を示します。
+
+```text
+1. S → L = R
+2. S → R
+3. L → * R
+4. L → id
+5. R → L
+```
+
+#### LR(1)項目集合の構築
+
+初期項目：`[S' → ・S, $]`
+
+#### ステップ1：閉包の計算
+
+初期項目の閉包を計算し、項目集合を構築します。
+
+#### ステップ2：GOTO関数の計算
+
+各項目集合に対して、GOTO関数を計算し、新たな項目集合を生成します。
+
+#### ステップ3：全体の項目集合の構築
+
+この過程を繰り返し、全ての項目集合を構築します。
+
+#### 構文解析表の作成
+
+構築したLR(1)項目集合を用いて、ACTION表とGOTO表を作成します。
+
+#### コンフリクトの解消
+
+この文法では、SLR(1)法では解消できないコンフリクトが発生しますが、LR(1)法では正しく解析できます。
+
+#### LR(1)法の欠点
+
+LR(1)法は強力ですが、解析表のサイズが大きくなるため、実用上はメモリや処理時間の問題があります。そこで、次節で説明するLALR(1)法がよく用いられます。LALR(1)法は、LR(1)法の解析能力を保ちつつ、解析表のサイズをSLR(1)法と同程度に抑えた手法です。
+
+## 5.12 LALR(1) - 現実的に取り扱いやすい上向き構文解析アルゴリズム
+
+LR(1)法は強力な手法ですが、解析表が大きくなるという欠点があります。LALR(1)（Look-Ahead LR）は、LR(0)の状態を結合し、LR(1)の性能を持ちながら解析表のサイズを抑える手法です。
+
+### LALR(1)解析表の作成
+
+LR(1)アイテムの集合を構築し、同じLR(0)アイテムを持つ状態をマージします。その際、先読み記号を適切に管理します。
+
+### 利点と欠点
+
+LALR(1)は多くの実用的な文法を扱えるため、構文解析器生成器（例えばYacc）で広く使われています。しかし、まれにLALR(1)では解析できない文法も存在します。
+
+## 5.13 - Parsing Expression Grammar(PEG) - 構文解析アルゴリズムのニューカマー
+
+2000年代に入るまで、構文解析手法の主流はLR法の変種であり、上向き構文解析アルゴリズムでした。その理由の一つに、先読みを前提とする限り、従来のLL法はLR法より表現力が弱いという弱点がありました。下向き型でもバックトラックを用いれば幅広い言語を表現できることは比較的昔から知られていましたが、バックトラックによって解析時間が最悪で指数関数時間になるという弱点があります。そのため、コンパイラの教科書として有名な、いわゆるドラゴンブックでも現実的ではないといった記述がありました（初版にはあったはずだが、第二版にも該当記述があるかは要確認）。しかし、2004年にBryan Fordによって提案されたParsing Expression Grammar（PEG）はそのような状況を変えました。
+
+PEGはおおざっぱに言ってしまえば、無制限な先読みとバックトラックを許す下向き型の構文解析手法の一つです。決定的文脈自由言語に加えて一部の文脈依存言語を取り扱うことができますし、Packrat Parsingという最適化手法によって線形時間で構文解析を行うことが保証されているというとても良い性質を持っています。さらに、LL法やLR法でほぼ必須であった字句解析器が要らず、アルゴリズムも非常にシンプルであるため、ここ十年くらいで解析表現手法をベースとした構文解析生成系が数多く登場しました。
+
+他人事のように書いていますが、筆者が大学院時代に専門分野として研究していたのがまさしくこのPEGでした。Python 3.9ではPEGベースの構文解析器が採用されるなど、PEGは近年採用されるケースが増えています。
+
+3章で既にPEGを用いた構文解析器を自作したのを覚えているでしょうか。たとえば、配列の文法を表現した以下のPEGがあるとします。
+
+```text
+array = LBRACKET RBRACKET | LBRACKET {value {COMMA value}} RBRACKET ;
+```
+
+　このPEGに対応するJavaの構文解析器（メソッド）は以下のようになるのでした。
+
+```java
+    public Ast.JsonArray parseArray() {
+        int backup = cursor;
+        try {
+            // LBRACKET RBRACKET
+            parseLBracket();
+            parseRBracket();
+            return new Ast.JsonArray(new ArrayList<>());
+        } catch (ParseException e) {
+            cursor = backup;
+        }
+
+        // LBRACKET
+        parseLBracket();
+        List<Ast.JsonValue> values = new ArrayList<>();
+        // value
+        var value = parseValue();
+        values.add(value);
+        try {
+            // {value {COMMA value}}
+            while (true) {
+                parseComma();
+                value = parseValue();
+                values.add(value);
+            }
+        } catch (ParseException e) {
+            // RBRACKET
+            parseRBracket();
+            return new Ast.JsonArray(values);
+        }
+    }
+```
+
+PEGの特色は、
+
+```java
+        int backup = cursor;
+```
+
+という行によって、解析を始める時点でのソースコード上の位置を保存しておき、もし解析に失敗したら以下のように「巻き戻す」ところにあります。「巻き戻した」位置から次の分岐を試そうとするのです。
+
+```java
+        } catch (ParseException e) {
+            cursor = backup;
+        }
+        // LBRACKET
+        parseLBracket();
+        // ...
+```
+
+なお、PEGの挙動を簡単に説明するために3章および本章では例外をスロー/キャッチするという実装にしていますが、現実にはこのような実装にするとオーバーヘッドが大きすぎるため、実用的なPEGパーザでは例外を使わないことが多いです。
+
+一般化すると、PEGの挙動は以下の8つの要素を使って説明することができます。
+
+1. 空文字列： ε
+2. 終端記号： t
+3. 非終端記号： N
+4. 連接： e1 e2
+5. 選択： e1 / e2
+6. 0回以上の繰り返し： e*
+7. 肯定述語： &e
+8. 否定述語： !e
+  
+  次節以降では、この8つの要素がそれぞれどのような意味を持つかを説明していきます。説明のために
+
+```java
+match(e, v) == Success(consumed, rest) 
+```
+
+や
+
+```java
+match(e, v) == Failure
+```
+
+というJava言語ライクな記法を使います。
+
+たとえば、
+
+```java
+match("x", "xy") == Success("x", "y")`
+```
+
+は式`x`が文字列`"xy"`にマッチして残りの文字列が`"y"`であることを示します。また、
+
+```java
+match("xy", "x") == Failure
+```
+
+は式`"xy"`が文字列`"x"`にマッチしないことを表現します。
+
+### 空文字列
+
+空文字列εは0文字**以上**の文字列にマッチします。たとえば、
+
+```java
+match(ε, "") == Success("", "")
+```
+
+が成り立つだけでなく、
+
+```java
+match(ε, "x") ==  Success("", "x")
+```
+
+や
+
+```java
+match(ε, "xyz") == Success("", "xyz")
+```
+
+も成り立ちます。εは**あらゆる文字列**にマッチすると言い換えることができます。
+
+### 終端記号
+
+終端記号`t`は1文字以上の長さで特定のアルファベットで**始まる**文字列にマッチします。たとえば、
+
+```java
+match(x, "x") == Success("x", "")
+```
+
+や
+
+```java
+match(x, "xy") == Success("x", "y")
+```
+
+が成り立ちます。一方、
+
+```java
+match(x, "y") == Failure
+```
+
+ですし、
+
+```java
+match(x, "") == Failure
+```
+
+です。εの場合と同じく「残りの文字列」があってもマッチする点に注意してください。
+
+### 選択
+
+`e1`と`e2`は共に式であるものとします。このとき、
+
+
+```text
+e1 / e2
+```
+
+に対する`match(e1 / e2, s)`は以下のような動作を行います。
+
+1. `match(e1, s)`を実行する
+2. 1.が成功していれば、sのサフィックスを返し、成功する
+3. 1.が失敗した場合、`match(e2, s)`を実行し、結果を返す
+
+### 選択
+
+`e1`と`e2`は共に式であるものとします。このとき、
+
+```text
+e1 e2
+```
+
+　に対する`match(e1 e2, s)`は以下のような動作を行います。
+
+1. `match(e1, s)`を実行する
+2. 1.が成功したとき、結果を`Success(s1,s2)`とする。この時、`match(e2,s2)`を実行し、結果を返す
+3. 1.が失敗した場合、その結果を返す
+
+### 非終端記号
+
+あるPEGの規則Nがあったとします。
+
+```text
+N <- e
+```
+
+`match(N, s)`は以下のような動作を行います。
+
+1. `N`に対応する規則を探索する（`N <- e`が該当）
+2. `N`の呼び出しから戻って来たときのために、スタックに現在位置`p`を退避
+3. `match(e, s)`を実行する。結果を`M`とする。
+4. スタックに退避した`p`を戻す
+5. `M`を全体の結果とする
+
+### 0回以上の繰り返し
+
+`e`は式であるものとします。
+
+```text
+e*
+```
+
+このとき、eと文字列sの照合を行うために以下のような動作を行います。
+
+1. `match(e,s)`を実行する
+2. 1.が成功したとき（`n`回目）、結果を`Success(s_n,s_(n+1))`とする。`s`を`s_(n+1)`に置き換えて、1.に戻る
+3. 1.が失敗した場合（`n`回目）、結果を`Success(s_1...s_n, s[n...])`とする
+
+`e*`は「0回以上の繰り返し」を表現するため、一回も成功しない場合でも全体が成功するのがポイントです。なお、`e*`は規則
+
+```
+H <- e H / ε
+```
+
+に対して`H`を呼び出すことの構文糖衣であり、全く同じ意味になります。
+
+### 肯定述語
+
+`e`は式であるものとします。このとき、
+
+```text
+&e
+```
+　
+は`match(&e,s)`を実行するために、以下のような動作を行います。
+
+1. `match(e,s)`を実行する
+2-1. 1.が成功したとき：結果を`Success("", s)`とする
+2-2. 1.が失敗した場合：結果は`Failure()`とする
+
+肯定述語は成功したときにも「残り文字列」が変化しません。肯定述語`&e`は後述する否定述語`!!`を二重に重ねたものに等しいことが知られています。
+
+
+### 否定述語
+
+`e`は式であるものとします。このとき、
+
+```text
+!e
+```
+　
+は`match(!e,s)`を実行するために以下のような動作を行います。
+
+1. `match(e,s)`を実行する
+2-1. 1.が成功したとき：結果を`Failure()`とする
+2-2. 1.が失敗した場合：結果は`Success("", s)`とする
+
+否定述語も肯定述語同様、成功しても「残り文字列」が変化しません。
+
+前述した`&e = !!e`は論理における二重否定の除去に類似するものということができます。
+
+### PEGの操作的意味論
+
+ここまでで、PEGを構成する8つの要素について説明してきましたが、実際のところは厳密さに欠けるものでした。より厳密に説明すると以下のようになります（Ford:04を元に改変）。先程までの説明では、`Success(s1, s2)`を使って、`s1`までは読んだことを、残り文字列が`s2`であることを表現してきました。ここではペア`(n, x)`で結果を表しており、`n`はステップ数を表すカウンタで`x`は残り文字列または`f`（失敗を表す値）となります。⇒を用いて、左の状態になったとき右の状態に遷移することを表現しています。
+
+```
+1. 空文字列: 
+  (ε,x) ⇒ (1,ε) （全ての x ∈ V ∗ Tに対して）。
+2. 終端記号(成功した場合): 
+  (a,ax) ⇒ (1,a) （a ∈VT , x ∈V ∗ T である場合）。
+3. 終端記号(失敗した場合):
+  (a,bx) ⇒ (1, f) iff a ≠ b かつ (a,ε) ⇒ (1, f)。
+4. 非終端記号:
+  (A,x) ⇒ (n + 1,o) iff A ← e ∈ R かつ(e,x) ⇒ (n,o)。
+5. 連接(成功した場合): 
+  (e1, x1 x2 y) ⇒ (n1,x1) かつ　(e2, x2 y) ⇒ (n2, x2) のとき、 (e1 e2,x1 x2 y) ⇒ (n1 + n2 + 1, x1 x2)。
+6. 連接(失敗した場合１): 
+  (e1, x) ⇒ (n1, f) ならば　(e1 e2,x) ⇒ (n1 + 1, f). もし　e1が失敗したならば、e1e2はe2を試すことなく失敗する。
+7. 連接(失敗した場合２): 
+  (e1, x1 y) ⇒ (n1,x1) かつ　(e2,y) ⇒ (n2, f) ならば (e1e2,x1y) ⇒ (n1 + n2 + 1, f)。
+8. 選択(場合１): 
+  (e1, x y) ⇒ (n1,x) ならば (e1/e2,xy) ⇒ (n1 +1,x)。
+9. 選択(場合２): 
+  (e1, x) ⇒ (n1, f) かつ (e2,x) ⇒ (n2,o) ならば (e1 / e2,x) ⇒ (n1 + n2 + 1,o)。
+10. 0回以上の繰り返し (繰り返しの場合): 
+  (e, x1 x2 y) ⇒ (n1,x1) かつ　(e∗,x2 y) ⇒ (n2, x2) ならば (e∗,x1 x2 y) ⇒ (n1 + n2 +1,x1 x2)。
+11. 0回以上の繰り返し (停止の場合）: 
+  (e,x) ⇒ (n1, f) ならば (e∗,x) ⇒ (n1 + 1, ε)。
+12. 否定述語（場合１): 
+  (e,xy) ⇒ (n,x) ならば (!e,xy) ⇒ (n + 1, f)。
+13. 否定述語（場合２): 
+  (e,x) ⇒ (n, f) ならば (!e,x) ⇒ (n + 1, ε)。
+```
+
+## 5.14 - Packrat Parsing
+
+素のPEGは非常に単純でいて、とても幅広い範囲の言語を取り扱うことができます。しかし、PEGには一つ大きな弱点があります。最悪の場合、解析時間が指数関数時間になってしまうことです。現実的にはそのようなケースは稀であるという指摘ありますが（論文を引用）、原理的にはそのような弱点があります。Packrat Parsingはメモ化という技法を用いることでPEGで表現される言語を線形時間で解析可能にします。
+
+メモ化という技法自体をご存じでない読者の方も多いかもしれないので、まずメモ化について説明します。
+
+### fibメソッド
+
+　メモ化の例でよく出てくるのはN番目のフィボナッチ数を求める`fib`関数です。この書籍をお読みの皆様ならお馴染みかもしれませんが、N番目のフィボナッチ数F(n)は次のようにして定義されます：
+
+```
+F(0) = 1
+F(1) = 1
+F(n) = F(n - 1) + F(n - 2)
+```
+
+　この再帰的定義を素朴にJavaのメソッドとして書き下したのが以下のfibメソッドになります。
+
+```java
+public class Main {
+    public static long fib(long n) {
+        if(n == 0 || n == 1) return 1L;
+        else return fib(n - 1) + fib(n - 2); 
+    }
+    public static void main(String[] args) {
+        System.out.println(fib(5)); // 120
+    }
+}
+```
+
+このプログラムを実行すると、コメントにある通り120が出力されます。しかし、このfibメソッドには重大な欠点があります。それは、nが増えると計算量が指数関数的に増えてしまうことです。たとえば、上のfibメソッドを使うと`fib(30)`くらいまではすぐに計算することができます。しかし、`fib(50)`を求めようとすると皆さんのマシンではおそらく数十秒はかかるでしょう。
+
+　フィボナッチ数を求めたいだけなのに数十秒もかかってはたまったものではありません。
+
+### fib関数のメモ化
+
+そこで出てくるのがメモ化というテクニックです。一言でいうと、メモ化とはある引数nに対して計算した結果f(n)をキャッシュしておき、もう一度同じnに対して呼び出されたときはキャッシュした結果を返すというものです。早速、fibメソッドをメモ化してみましょう。
+
+メモ化されたfibメソッドは次のようになります。
+
+```java
+import java.util.*;
+public class Main {
+    private static Map<Long, Long> cache = new HashMap<>();
+    public static long fib(long n) {
+        Long value = cache.get(n);
+        if(value != null) return value;
+
+        long result;
+        if(n == 0 || n == 1) {
+            result = 1L;
+        } else {
+            result = fib(n - 1) + fib(n - 2);
+        }
+        cache.put(n, result);
+        return result;
+    }
+    public static void main(String[] args) {
+        System.out.println(fib(50)); // 20365011074
+    }
+}
+```
+
+`fib(50)`の結果はコメントにある通りですが、今度は一瞬で結果がかえってきたのがわかると思います。メモ化されたfibメソッドでは同じnに対する計算は二度以上行われないので、nが増えても実行時間は線形にしか増えません。つまり、fib(50)の実行時間は概ねfib(25)の二倍であるということです。
+
+ただし、計算量に詳しい識者の方は「おいおい。整数同士の加算が定数時間で終わるという仮定はおかしいんじゃないかい？」なんてツッコミを入れてくださるかもしれませんが、そこを議論するとややこしくなるので整数同士の加算はたかだか定数時間で終わるということにします。
+
+`fib`メソッドのメモ化でポイントとなるのは、記憶領域（`cache`に使われる領域）と引き換えに最悪計算量を指数関数時間から線形時間に減らせるということです。また、メモ化する対象となる関数は一般的には副作用がないものに限定されます。というのは、メモ化というテクニックは「同じ引数を渡せば同じ値が返ってくる」ことを暗黙の前提にしているからです。
+
+次の項ではPEGをナイーヴに実装した`parse`関数をまずお見せして、続いてそれをメモ化したバージョン（Packrat parsing）をお見せすることにします。`fib`メソッドのメモ化と同じようにPEGによる構文解析もメモ化できることがわかるでしょう。
+
+### parseメソッド
+
+　ここからは簡単なPEGで記述された文法を元に構文解析器を組み立てていくわけですが、下記のような任意個の`()`で囲まれた`0`の構文解析器を作ります。
+
+```
+A <- "(" A ")"
+   / "(" A A ")"
+   / "0"
+```
+
+　単純過ぎる例にも思えますが、メモ化の効果を体感するにはこれで十分です。早速構文解析器を書いていきましょう。
+
+```java
+sealed interface ParseResult permits ParseResult.Success, ParseResult.Failure {
+    public abstract String rest();
+    record Success(String value, String rest) implements ParseResult {}
+    record Failure(String rest) implements ParseResult {}
+}
+class ParseError extends RuntimeException {
+    public final String rest;
+    public String rest() {
+        return rest;
+    }
+    ParseError(String rest) {
+        this.rest = rest;
+    }
+}
+public class Parser {
+    private static boolean isEnd(String string) {
+        return string.length() == 0;
+    }
+    public static ParseResult parse(String input) {
+        String start = input;
+        try {
+            // "(" A ")"
+            if(isEnd(input) || input.charAt(0) != '(') {
+                throw new ParseError(input);
+            }
+
+            var result = parse(input.substring(1));
+            if(!(result instanceof ParseResult.Success)) {
+                throw new ParseError(result.rest());
+            }
+
+            var success = (ParseResult.Success)result;
+
+            input = success.rest();
+            if(isEnd(input) || input.charAt(0) != ')') {
+                throw new ParseError(input);
+            }
+
+            return new ParseResult.Success(success.value(), input.substring(1));
+        } catch (ParseError error) {
+            input = start;
+        }
+
+        try {
+            // "(" A A ")"
+            if((isEnd(input)) || input.charAt(0) != '(') {
+                throw new ParseError(input);
+            }
+
+            var result = parse(input.substring(1));
+            if(!(result instanceof ParseResult.Success)) {
+                throw new ParseError(result.rest());
+            }
+
+            var success = (ParseResult.Success)result;
+            input = success.rest();
+
+            result = parse(input);
+
+            if(!(result instanceof ParseResult.Success)) {
+                throw new ParseError(result.rest());
+            }
+
+            success = (ParseResult.Success)result;
+            input = success.rest();
+
+            if(isEnd(input) || input.charAt(0) != ')') {
+                throw new ParseError(input);
+            }
+
+            return new ParseResult.Success(success.value(), success.rest().substring(1));
+        } catch (ParseError error) {
+            input = start;
+        }
+
+        if(isEnd(input) || input.charAt(0) != '0') {
+            return new ParseResult.Failure(input);
+        }
+
+        return new ParseResult.Success(input.substring(0, 1), input.substring(1));
+    }
+}
+```
+
+このプログラムを使うと以下のように構文解析を行うことが出来ます。
+
+```java
+jshell> Parser.parse("(");
+$25 ==> Failure[rest=]
+jshell> Parser.parse("()");
+$26 ==> $26 ==> Failure[rest=)]
+jshell> Parser.parse("(0)");
+$27 ==> Success[value=), rest=]
+```
+　
+しかし、この構文解析器には弱点があります。`(((((((((((((((((((((((((((0)))`のようなカッコのネスト数が深いケースで急激に解析にかかる時間が増大してしまうのです。これはまさにPEGだからこそ起こる問題点だと言えます。
+
+### parseメソッドのメモ化 - Packrat Parsing
+
+前のコードをもとに`parse`メソッドをメモ化してみましょう。コードは以下のようになります。
+
+```java
+import java.util.*;
+sealed interface ParseResult permits ParseResult.Success, ParseResult.Failure {
+    public abstract String rest();
+    record Success(String value, String rest) implements ParseResult {}
+    record Failure(String rest) implements ParseResult {}
+}
+class ParseError extends RuntimeException {
+    public final String rest;
+    public String rest() {
+        return rest;
+    }
+    ParseError(String rest) {
+        this.rest = rest;
+    }
+}
+class PackratParser {
+    private Map<String, ParseResult> cache = new HashMap<>();
+    private boolean isEnd(String string) {
+        return string.length() == 0;
+    }
+    public ParseResult parse(String input) {
+        String start = input;
+        try {
+            // "(" A ")"
+            if(isEnd(input) || input.charAt(0) != '(') {
+                throw new ParseError(input);
+            }
+
+            input = input.substring(1);
+            ParseResult result;
+            result = cache.get(input);
+            if(result == null) {
+                result = parse(input);
+                cache.put(input, result);
+            }
+
+            if(!(result instanceof ParseResult.Success)) {
+                throw new ParseError(result.rest());
+            }
+
+            var success = (ParseResult.Success)result;
+
+            input = success.rest();
+            if(isEnd(input) || input.charAt(0) != ')') {
+                throw new ParseError(input);
+            }
+
+            return new ParseResult.Success(success.value(), input.substring(1));
+        } catch (ParseError error) {
+            input = start;
+        }
+
+        try {
+            // "(" A A ")"
+            if((isEnd(input)) || input.charAt(0) != '(') {
+                throw new ParseError(input);
+            }
+
+            input = input.substring(1);
+            ParseResult result;
+            result = cache.get(input);
+            if(result == null){
+                result = parse(input);
+                cache.put(input, result);
+            } 
+
+            if(!(result instanceof ParseResult.Success)) {
+                throw new ParseError(result.rest());
+            }
+
+            var success = (ParseResult.Success)result;
+            input = success.rest();
+
+            result = cache.get(input);
+            if(result == null) {
+                result = parse(input);
+                cache.put(input,result);
+            }
+
+            if(!(result instanceof ParseResult.Success)) {
+                throw new ParseError(result.rest());
+            }
+
+            success = (ParseResult.Success)result;
+            input = success.rest();
+
+            if(isEnd(input) || input.charAt(0) != ')') {
+                throw new ParseError(input);
+            }
+
+            return new ParseResult.Success(success.value(), input.substring(1));
+        } catch (ParseError error) {
+            input = start;
+        }
+
+        if(isEnd(input) || input.charAt(0) != '0') {
+            return new ParseResult.Failure(input);
+        }
+
+        return new ParseResult.Success(input.substring(0, 1), input.substring(1));
+    }
+}
+```
+
+```java
+    private Map<String, ParseResult> cache = new HashMap<>();
+```
+
+というフィールドが加わったことです。このフィールド`cache`がパーズの途中結果を保持してくれるために計算が高速化されるのです。結果として、PEGでは最悪指数関数時間かかっていたものがPackrat Parsingでは入力長に対してたかだか線形時間で解析できるようになりました。
+
+PEGは非常に強力な能力を持っていますが、同時に線形時間で構文解析を完了できるわけで、これはとても良い性質です。そういった理由もあってか、PEGやPackrat Parsingを用いた構文解析器や構文解析器生成系はここ10年くらいで大幅に増えました。
+
+## 5.15 - Generalized LR (GLR) Parsing
+
+GLR（Generalized LR）法は、Tomitaによって提案された手法で、曖昧な文法や非決定性を含む文法を扱うことができます。GLRは解析中に可能性のある複数の解析パスを同時に追跡し、すべての解釈を得ることができます。
+
+### GLRの特徴
+
+- 複数の解析スタックを同時に管理
+- シフト・還元動作を一般化
+- 木構造の共有によりメモリ効率を向上
+
+GLRは曖昧さを扱えるため、自然言語処理や曖昧な構文を持つプログラミング言語の解析に適しています。
+
+## 5.16 - Generalized LL (GLL) Parsing
+
+GLL（Generalized LL）法は、LL法を拡張して曖昧な文法を扱えるようにした手法で、Scottらによって2010年に提案されました（Scott:2010）。GLL法は再帰下降構文解析機を一般化したもので、非決定性を処理するために解析スタックと呼ばれるデータ構造を用います。
+
+GLLの特徴は以下の通りです。
+
+- 再帰下降構文解析機の拡張
+- 非決定性を処理できる
+- 部分的なメモ化による効率化
+
+## 5.17 - Parsing with Derivatives (PwD)
+
+Parsing with derivatives(PwD)はPwD（Parsing with Derivatives）は、正規表現の微分の概念を文脈自由文法に拡張した手法で、Mightらによって2011年に提案されました（Might:2011）。関数型のプログラムとして記述され、遅延評価や無限リストを活用します。
+
+PwDの特徴は以下の通りです。
+
+- 理論的にシンプル
+- 遅延評価による効率化
+- 関数型プログラミング言語での実装が容易
+
+## 5.18 - Tunnel Parsing 
+
+[トンネル構文解析](https://dl.acm.org/doi/abs/10.2478/cait-2022-0021)は、曖昧性のある文法を効率的に解析するための新しい手法です。解析の過程で不要な部分をスキップ（トンネル）することで、効率的な解析を実現します。
+
+トンネル構文解析の特徴は以下の通りです。
+
+- 不要な解析パスを早期に除外
+- メモリ使用量の削減
+- 特定の問題領域での効率的な解析
+
+## 5.19 - 構文解析アルゴリズムの計算量と表現力の限界 
+
+　LL parsing、LR parsing、PEG、Packrat parsing、GLR parsing、GLL parsingについてこれまで書いてきましたが、計算量的な性質についてまとめておきましょう。なお、`n`は入力文字列長を表します。
+
+| アルゴリズム        | 時間計算量     | 空間計算量                      |
+| ------------------- | ------------- | ------------------------------- | 
+| LL(1)               | O(n)          | O(&#124;N&#124; * &#124;T&#124;) |
+| LL(k)               | O(n)          | ???                             |
+| SLR(1)              | O(n)          | O(&#124;N&#124; * &#124;P&#124; * &#124;T&#124;) |
+| LR(1)               | O(n)          | O(s * &#124;T&#124;)            |
+| LALR(1)             | O(n)          | O(s * &#124;T&#124;)            |
+| PEG                 | O(2^n)        | O(n)                            |
+| Packrat Parsing     | O(n)          | O(n * &#124;P&#124;)            |
+| GLR                 | O(n^3)        | O(n^3)                          |
+| GLL                 | O(n^3)        | O(n^3)                          |
+| PwD                 | O(n^3)        | O(n^3)                          |
+| トンネル構文解析    | 問題に依存     | 問題に依存                      |
+
+nは全てのアルゴリズムで入力文字列の長さを表します。その他の記号については以下の通りです。
+
+- LL(1)
+  - `|S|`: 開始記号列のサイズ
+  - `|T|`: は終端記号の数
+- SLR(1):
+  - `|N|`: 規則の右辺のサイズ
+  - `|P|`: 規則の数
+  - `|T|`: 終端記号の数
+- LR(1):
+  - s: 状態数
+  - `|T|`: 終端記号の数
+- LALR(1):
+  - s: 状態数
+  - `|T|`: 終端記号の数
+- PEG or packrat parsing
+  - `|P|`: 規則の数
+
+LL(1)やLR(1)は線形時間で解析を終えられますが、GLRやGLLは最悪の場合多項式時間を要します。PEGは指数時間がかかることがありますが、Packrat Parsingによって線形時間で解析できるようになります。
+
+## 5.20 - まとめ
+
+この章では構文解析アルゴリズムの中で比較的メジャーな手法について、そのアイデアと概要を含めて説明しました。その他にも多数の手法がありますが、いずれにせよ、「上から下に」向かって解析する下向きの手法と「下から上に」向かって解析する上向きの手法のどちらかに分類できると言えます。
+
+GLRやGLL、PwDについては普段触れる機会はそうそうありませんが、LLやLR、PEGのパーサジェネレータは多数存在するため、基本的な動作原理について押さえておいて損はありません。また、余裕があれば各構文解析手法を使って実際のパーサジェネレータを実装してみるのも良いでしょう。実際にパーサジェネレータを実装することで、より深く構文解析手法を理解することもできます。
