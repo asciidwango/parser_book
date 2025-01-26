@@ -7,14 +7,14 @@
   
   <!-- Nodes -->
   <!-- ルートノード (灰色) -->
-  <circle cx="100" cy="30" r="15" fill="#808080" stroke="black" stroke-width="2"/>
+  <circle cx="100" cy="30" r="15" fill="gray" stroke="black" stroke-width="2"/>
   <!-- 葉ノード (緑色) -->
-  <circle cx="60" cy="80" r="15" fill="#90EE90" stroke="black" stroke-width="2"/>
+  <circle cx="60" cy="80" r="15" fill="green" stroke="black" stroke-width="2"/>
   <!-- 内部ノード (茶色) -->
-  <circle cx="140" cy="80" r="15" fill="#8B4513" stroke="black" stroke-width="2"/>
+  <circle cx="140" cy="80" r="15" fill="brown" stroke="black" stroke-width="2"/>
   <!-- 葉ノード (緑色) -->
-  <circle cx="120" cy="130" r="15" fill="#90EE90" stroke="black" stroke-width="2"/>
-  <circle cx="160" cy="130" r="15" fill="#90EE90" stroke="black" stroke-width="2"/>
+  <circle cx="120" cy="130" r="15" fill="green" stroke="black" stroke-width="2"/>
+  <circle cx="160" cy="130" r="15" fill="green" stroke="black" stroke-width="2"/>
   
   <!-- Text labels -->
   <text x="100" y="35" text-anchor="middle" dominant-baseline="middle" font-size="16" fill="white">=</text>
