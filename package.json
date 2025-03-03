@@ -16,7 +16,8 @@
     "parser"
   ],
   "devDependencies": {
-    "honkit": "^4.0.8",
-    "honkit-plugin-search-plus": "^1.0.0"
+    "honkit": "^6.0.2",
+    "honkit-plugin-search-plus": "1.0.0",
+    "honkit-plugin-katex": "1.1.7"
   }
 }

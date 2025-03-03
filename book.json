@@ -5,7 +5,7 @@
     "summary": "SUMMARY.md"
   },
   "plugins": [
-    "honkit-plugin-search-plus"
+   "-lunr", "-search", "search-plus"
   ],
   "title": "構文解析の世界を探求しよう"
 }

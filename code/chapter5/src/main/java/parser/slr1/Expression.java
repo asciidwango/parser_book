@@ -1,4 +1,4 @@
-package parser.slr0;
+package parser.slr1;
 
 public sealed interface Expression permits Expression.NonTerminal, Expression.Terminal {
     record NonTerminal(String name) implements Expression {}
