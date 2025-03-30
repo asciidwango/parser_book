@@ -447,7 +447,7 @@ Scala処理系内部でプレースホルダ構文がどのように実装され
 
   Yaccのようなツールでは、`error` トークンを使ってエラー規則を定義できます。
 
-```yacc
+```text
 statement: IF '(' expr ')' statement
          | IF error ')' statement { yyerror("Missing opening parenthesis in if statement"); }
          | /* ... other rules ... */
