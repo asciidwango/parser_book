@@ -1,4 +1,4 @@
-# 2. 構文解析の基本
+# 第2章 構文解析の基本
 
 この章からいよいよ構文解析についての説明を始めたいと思います。とはいっても本書を手に取った皆様は構文解析についてまだ馴染みがないかと思います。そこで、まずは第1章でみたような算術式の構文解析を例にして、構文解析の基本について学ぶことにしましょう。
 
@@ -333,15 +333,15 @@ expression = term { ↑ (`+` | `-`) term ↑ }
 
 ```java
 // 式を表すインタフェース
-sealed interface Exp permits Add, Sub, Mul, Div Num {}
+sealed interface Exp permits Add, Sub, Mul, Div, Num {}
 // 加算を表すレコード
-record Add(Exp left, Exp right) implements Exp {}
+record Add(Exp lhs, Exp rhs) implements Exp {}
 // 減算を表すレコード
-record Sub(Exp left, Exp right) implements Exp {}
+record Sub(Exp lhs, Exp rhs) implements Exp {}
 // 乗算を表すレコード
-record Mul(Exp left, Exp right) implements Exp {}
+record Mul(Exp lhs, Exp rhs) implements Exp {}
 // 除算を表すレコード
-record Div(Exp left, Exp right) implements Exp {}
+record Div(Exp lhs, Exp rhs) implements Exp {}
 // 数値を表すレコード
 record Num(int value) implements Exp {}
 ```
@@ -353,9 +353,9 @@ record Num(int value) implements Exp {}
 試しに`1 + 2 * 3`の抽象構文木をJavaで表現してみましょう。
 
 ```java
-Expr exp = new Add(
-  new Num(1),
-  new Mul(new Num(2), new Num(3))
+// 1 + 2 * 3
+Exp exp = new Add(
+  new Num(1), new Mul(new Num(2), new Num(3))
 );
 ```
 
@@ -369,32 +369,39 @@ Expr exp = new Add(
 
 ```java
 int eval(Exp e) {
-  switch(e){
-    case Num n:
-      return n.value();
-    case Add a:
-      return eval(a.left()) + eval(a.right());
-    case Sub s:
-      return eval(s.left()) - eval(s.right());
-    case Mul m:
-      return eval(m.left()) * eval(m.right());
-    case Div d ->
-      if(eval(d.right()) == 0) {
+  return switch(e){
+    case Num t -> t.value();
+    case Add t -> eval(t.lhs()) + eval(t.rhs());
+    case Sub t -> eval(t.lhs()) - eval(t.rhs());
+    case Mul t -> eval(t.lhs()) * eval(t.rhs());
+    case Div t -> {
+      if(eval(t.rhs()) == 0) {
         throw new ArithmeticException("division by zero");
       }
-      return eval(d.left()) / eval(d.right());
+      yield eval(t.lhs()) / eval(t.rhs());
+    }
   };
 }
 ```
 
 ノードの種類に応じてswitch式で処理を分岐しています。`Num`ノードの場合はその値を返し、`Add`ノードの場合は左右の子ノードを再帰的に評価して足し算を行います。同様に、`Sub`、`Mul`、`Div`ノードの場合も、それぞれの演算を行っています。
 
-このように、抽象構文木をデータとして表現することで、プログラムの構造を簡単に解析することができるのです。
+この`eval`メソッドを使うことで、次のように抽象構文木を評価することができます。
+
+```java
+// 1 + 2 * 3
+Exp exp = new Add(
+  new Num(1), new Mul(new Num(2), new Num(3))
+);
+eval(exp); // 7
+```
+
+抽象構文木をデータとして表現することで、プログラムの構造を簡単に解析することができるのです。
 
 ## 2.6 まとめ
 
 この章では、算術式の文法を例題としてBNFについて紹介し、BNFに基づいて算術式を解析する方法の概要について説明しました。また、抽象構文木についても紹介し、抽象構文木をJavaで表現する方法と、抽象構文木を評価する方法について説明しました。
 
-しかし、今のままではBNFと抽象構文木を繋ぐことができません。次章では、BNFを元に、実際にJavaで動くJSONの構文解析器を実装し、JSONの抽象構文木を生成する方法について詳しく説明します。
+しかし、今のままではBNFに基づく「構文解析器」は与えられた文字列がマッチするか判定するだけで、抽象構文木を生成することができません。次章ではBNFを元に、実際にJavaで動くJSONの構文解析器を実装し、JSONの抽象構文木を生成する方法について詳しく説明します。
 
 [^1]: 翻訳: ISO/IEC 14977:1996 Information technology — Syntactic metalanguage — Extended BNF
