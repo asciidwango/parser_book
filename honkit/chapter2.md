@@ -404,4 +404,4 @@ eval(exp); // 7
 
 しかし、今のままではBNFに基づく「構文解析器」は与えられた文字列がマッチするか判定するだけで、抽象構文木を生成することができません。次章ではBNFを元に、実際にJavaで動くJSONの構文解析器を実装し、JSONの抽象構文木を生成する方法について詳しく説明します。
 
-[^1]: 翻訳: ISO/IEC 14977:1996 Information technology — Syntactic metalanguage — Extended BNF
+[^1]: 翻訳: ISO/IEC 14977:1996 Information technology — Syntactic metalanguage — Extended BNF https://hazm.at/mox/lang/meta-language/ebnf/iso-iec-14977-extended-bnf/index.html
