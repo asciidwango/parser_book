@@ -1,6 +1,6 @@
-# 6. 構文解析器生成系の世界
+# 第6章 構文解析器生成系の世界
 
-　4章では現在知られている構文解析手法について、アイデアと提案手法の概要について説明しました。実は、構文解析の世界ではよく知られていることなのですが、4章で説明した各種構文解析手法は毎回プログラマが手で実装する必要はありません。
+　第5章では現在知られている構文解析手法について、アイデアと提案手法の概要について説明しました。実は、構文解析の世界ではよく知られていることなのですが、第5章で説明した各種構文解析手法は毎回プログラマが手で実装する必要はありません。
 
 　というのは、CFGやPEG（その類似表記も含む）によって記述された文法定義から特定の構文解析アルゴリズムを用いた構文解析器を生成する構文解析器生成系というソフトウェアがあるからです。もちろん、それぞれの構文解析アルゴリズムや生成する構文解析器の言語ごとに別のソフトウェアを書く必要がありますが、ひとたびある構文解析アルゴリズムのための構文解析器生成系を誰かが書けば、その構文解析アルゴリズムを知らないプログラマでもその恩恵にあずかることができるのです。
 
@@ -14,27 +14,38 @@
 
 ## 6.1 Dyck言語の文法とPEGによる構文解析器生成
 
-これまで何度も登場したDyck言語は明らかにLL(1)法でもLR(1)法でもPEGによっても解析可能な言語です。実際、4章ではDyck言語を解析する手書きのPEGパーザを書いたのでした。しかし、立ち戻ってよくよく考えてみると退屈な繰り返しコードが散見されたのに気づいた方も多いのではないでしょうか（4章に盛り込む予定）。
+これまで何度も登場したDyck言語は明らかにLL(1)法でもLR(1)法でもPEGによっても解析可能な言語です。（第4章でDyck言語のBNFやCFGを紹介しましたが、具体的な手書きPEGパーザのコードは第5章の再帰下降パーザが近い考え方です）。しかし、手書きでパーザを実装しようとすると、退屈な繰り返しコードが多くなりがちです。
 
 実際のところ、Dyck言語を表現する文法があって、構文解析アルゴリズムがPEGということまで分かれば対応するJavaコードを**機械的に生成する**ことも可能そうに見えます。特に、構文解析はコード量が多いわりには退屈な繰り返しコードが多いものですから、文法からJavaコードを生成できれば劇的に工数を削減できそうです。
 
 このように「文法と構文解析手法が決まれば、後のコードは自動的に決定可能なはずだから、機械に任せてしまおう」という考え方が構文解析器生成系というソフトウェアの背後にあるアイデアです。
 
-早速ですが、以下のようにDyck言語を表す文法が与えられたとして、PEGを使った構文解析器を生成する方法を考えてみましょう。
+早速ですが、以下のようにDyck言語を表す文法（第4章で示した `P -> ( P ) P | ε` に近いもの）がPEGで与えられたとして、構文解析器を生成する方法を考えてみましょう。
 
-```text
+```peg
 D <- P;
-P <- "(" P ")" | "()";
+P <- "(" P ")" P / ""; // "" は空文字列εを表す
 ```
-
-PEGでは非終端記号の呼び出しは関数呼び出しとみなすことができますから、まず次のようなコードになります。
+このPEG定義は、`P` が `(P)P` の形であるか、または空文字列であることを示します。
+PEGでは非終端記号の呼び出しは関数呼び出しとみなすことができますから、この定義から機械的に対応するパーザ関数（メソッド）のスケルトンを考えると、まず次のようなコードのイメージになります。
 
 ```java
+// 概念的なスケルトン
 public boolean parseD() {
-    return parseP();
+    return parseP(); // DはPに委譲
 }
+
 public boolean parseP() {
-    "(" P ")" | "()"
+    // P <- "(" P ")" P / "";
+    // まず "(" P ")" P を試す
+    //   "(" にマッチするか？
+    //   マッチしたら、P を再帰的に呼び出す (1回目)
+    //   成功したら、")" にマッチするか？
+    //   マッチしたら、P を再帰的に呼び出す (2回目)
+    //   成功したら、全体として成功
+    // もし途中で失敗したら、バックトラックして "" を試す
+    //   "" は常に成功（空文字列を消費）
+    // どちらかが成功すれば parseP は成功
 }
 ```
 
@@ -82,7 +93,7 @@ TOKEN : {
 | <RPAREN: ")">
 | <INTEGER: (["0"-"9"])+>
 }
-o
+
 public int expression() :
 {int r = 0;}
 {
@@ -101,7 +112,7 @@ public int add() :
 public int mult() :
 {int r = 0; int v = 0;}
 {
-    r=primary() ( <MULTIPLY> v=primary() { r *= v; }| <DIVIDE> r=primary() { r /= v; })* {
+    r=primary() ( <MULTIPLY> v=primary() { r *= v; }| <DIVIDE> v=primary() { r /= v; })* { // 修正: DIVIDE の右辺も v=primary()
         return r;
     }
 }
@@ -501,7 +512,7 @@ object Calculator extends SCombinator {
     $("-").map { op => (lhs: Int, rhs: Int) => lhs - rhs }
   })
 
-  // M ::= P ("+" P | "-" P)* 
+  // M ::= P ("*" P | "/" P)* 
   def M: Parser[Int] = rule(chainl(P) {
     $("*").map { op => (lhs: Int, rhs: Int) => lhs * rhs } |
     $("/").map { op => (lhs: Int, rhs: Int) => lhs / rhs }
@@ -540,7 +551,7 @@ object Calculator extends SCombinator {
 
 ```java
 interface JParser<R> {
-  Result<R> void parse(String input);
+  Result<R> parse(String input);
 }
 ```
 
@@ -590,30 +601,31 @@ assert (new Result<Integer>(123, "")).equals(map(string("123"), v -> Integer.par
 BNFで`a | b`、つまり選択を書くのに相当するメソッドも必要です。これは次のような`alt()`メソッドとして提供します。
 
 ```java
-<T> JParser<T> alt(Parser<T> p1, Parser<T> p1);
-assert (new Result<String>("bar", "")).equals(alt(string("foo"), string("bar")));
+<T> JParser<T> alt(JParser<T> p1, JParser<T> p2); // 引数名と型名を修正
+assert (new Result<String>("bar", "")).equals(alt(string("foo"), string("bar")).parse("bar")); // .parse() を追加
 ```
 
 同様に、BNFで`a b`、つまり連接」を書くのに相当するメソッドも必要ですが、これは次のような`seq()`メソッドとして提供します。
 
 ```java
 record Pair<A, B>(A a, B b){}
-<T> JParser<Pair<T>> seq(Parser<T> p1, Parser<T> p2);
-assert (new Result<>(new Pair("foo", "bar"), "")).equals(seq(string("foo"), string("bar")))
+<A, B> JParser<Pair<A, B>> seq(JParser<A> p1, JParser<B> p2); // 型パラメータを修正
+assert (new Result<>(new Pair<>("foo", "bar"), "")).equals(seq(string("foo"), string("bar")).parse("foobar")); // .parse() を追加
 ```
 
 最後に、BNFで`a*`、つまり0回以上の繰り返しに相当する`rep0()`メソッド
-
+（注意: `string("")` を `rep0` に渡すと無限ループの可能性があるため、アサーション例はより安全なものに変更するか、`string("")` の挙動を明確にする必要があります。ここではアサーション例をコメントアウトします。）
 ```java
-<T> JParser<List<T>> rep0(Parser<T> p);
-assert (new Result<List<String>>(List.of(), "")).equals(rep0(string("")))
+<T> JParser<List<T>> rep0(JParser<T> p);
+// assert (new Result<List<String>>(List.of(), "abc")).equals(rep0(string("x")).parse("abc")); // "x" がマッチしない場合
+// assert (new Result<List<String>>(List.of("a","a"), "bc")).equals(rep0(string("a")).parse("aabc"));
 ```
 
 や`a+`、つまり1回以上の繰り返しに相当する`rep1()`メソッドもほしいところです。
 
 ```java
-<T> JParser<List<T>> rep1(Parser<T> p);
-assert (new Result<List<String>>(List.of("a", "a", "a"), "")).equals(rep1(string("aaa")))
+<T> JParser<List<T>> rep1(JParser<T> p);
+assert (new Result<List<String>>(List.of("a", "a", "a"), "")).equals(rep1(string("a")).parse("aaa")); // .parse() を追加し、引数を修正
 ```
 
 この節ではこれらのプリミティブなメソッドの実装方法について説明していきます。
@@ -690,12 +702,12 @@ public class JComb {
 }
 
 class JAltParser<A> implements JParser<A> {
-  private JParser<A> p1, p2;;
-  public JAltParser(Parser<A> p1, Parser<A> p2) {
+  private JParser<A> p1, p2; // 重複したセミコロンを削除
+  public JAltParser(JParser<A> p1, JParser<A> p2) { // 型名をJParserに修正
     this.p1 = p1;
     this.p2 = p2;
   }
-  public Result<String> parse(String input) {
+  public Result<A> parse(String input) { // 戻り値の型をResult<A>に修正
     var result = p1.parse(input);
     if(result != null) return result;
     return p2.parse(input);
@@ -773,9 +785,10 @@ public class JComb {
         return (input) -> {
             var result = rep1Sugar.parse(input);//(1)
             if(result == null) return null;//(2)
-            var values = new ArrayList<>();
-            values.add(rep1Sugar.b());
-            values.addAll(rep1Sugar.b());
+            var pairValue = result.value(); // resultから値を取得
+            var values = new ArrayList<A>();
+            values.add(pairValue.a()); // Pairの最初の要素
+            values.addAll(pairValue.b()); // Pairの2番目の要素 (List)
             return new Result<>(values, result.rest()); //(3)
         };
     }
@@ -855,16 +868,15 @@ assert (new Result<Integer>(10, "")).equals(number.parse("10"));
 
 ```java
 public class Calculator {
+   // expression は加減算を担当 (左結合)
+   // expression <- additive ( ( "+" | "-" ) additive )*
    public static JParser<Integer> expression() {
-        /*
-         * expression <- additive ( ("+" / "-") additive )*
-         */
         return seq(
-                lazy(() -> additive()),
+                lazy(() -> additive()), // additive は実質的に乗除の項 (term)
                 rep0(
                         seq(
                                 alt(string("+"), string("-")),
-                                lazy(() -> additive())
+                                lazy(() -> additive()) // ここも乗除の項
                         )
                 )
         ).map(p -> {
@@ -883,10 +895,9 @@ public class Calculator {
         });
     }
 
+    // additive は乗除算を担当 (左結合) - メソッド名は term や multiplicative の方が適切かもしれない
+    // additive <- primary ( ( "*" | "/" ) primary )*
     public static JParser<Integer> additive() {
-        /*
-         * additive <- primary ( ("*" / "/") primary )*
-         */
         return seq(
                 lazy(() -> primary()),
                 rep0(
