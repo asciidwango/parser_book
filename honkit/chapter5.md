@@ -1054,7 +1054,7 @@ PEGはおおざっぱに言ってしまえば、無制限な先読みとバッ�
 
 3章で既にPEGを用いた構文解析器を自作したのを覚えているでしょうか。たとえば、配列の文法を表現した以下のPEGがあるとします (第3章のBNF定義 `array = LBRACKET RBRACKET | LBRACKET value {COMMA value} RBRACKET ;` と同じ意味です)。
 
-```peg
+```text
 array <- LBRACKET (value (COMMA value)*)? RBRACKET
 // 上記は以下と同等とも解釈できる (PEGでは / が順序付き選択)
 // array <- LBRACKET RBRACKET / LBRACKET value (COMMA value)* RBRACKET
