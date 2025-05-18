@@ -6,9 +6,9 @@
 
 JSONは、WebサービスにアクセスするためのAPIで非常に一般的に使われているデータフォーマットです。また、企業内サービス間で連携するときにも非常によく使われます。皆さんは何らかの形でJSONに触れたことがあるのではないかと思います。
 
-JSONは元々は、JavaScriptのサブセットとして、オブジェクトに関する部分だけを切り出したものでしたが、現在はECMA-404[^1]で標準化されており、色々な言語でJSONを扱うライブラリがあります。また、JSONはデータ交換用フォーマットの中でも非常にシンプルであるという特徴があり、そのシンプルさ故か、同じ言語でもJSONを扱うライブラリが乱立する程です。また、今のWebアプリケーション開発に携わる開発者にとってJSONは避けて通れないといってよいでしょう。
+JSONは元々は、JavaScriptのサブセットとして、オブジェクトに関する部分だけを切り出したものでしたが、現在はECMA-404[^1]で標準化されており、色々な言語でJSONを扱うライブラリがあります。また、JSONはデータ交換用フォーマットの中でも非常にシンプルであるという特徴があり、そのシンプルさ故か、同じ言語でもJSONを扱うライブラリが乱立する程です。今のWebアプリケーション開発に携わる開発者にとってJSONは避けて通れないといってよいでしょう。
  
- 以降では簡単なJSONのサンプルを通してJSONの概要を説明します。
+以降では簡単なJSONのサンプルを通してJSONの概要を説明します。
 
 ### 3.1.1 オブジェクト
 
@@ -21,7 +21,7 @@ JSONは元々は、JavaScriptのサブセットとして、オブジェクトに
 }
 ```
 
-このJSONは、`name`という名前と、`"Kota Mizushima"`という文字列の**ペア**と、`age`という名前と`41`というペアからなる**オブジェクト**であることを示しています。
+このJSONは、`name`と`"Kota Mizushima"`という文字列の**ペア**と、`age`と`41`という数値の**ペア**からなる**オブジェクト**であることを示しています。
 
 なお、用語については、ECMA-404の仕様書に記載されているものに準拠しています。名前/値のペアは、属性やプロパティと呼ばれることもあるので、適宜読み替えてください。
 日本語で表現すると、このオブジェクトは、名前が`Kota Mizushima`、年齢が`41`という人物一人分のデータを表していると考えることができます。オブジェクトは、`{}`で囲まれた、`name:value`の対が`,`を区切り文字として続く形になります。後述しますが、`name`の部分は**文字列**である必要があります。
@@ -44,15 +44,15 @@ JSONは元々は、JavaScriptのサブセットとして、オブジェクトに
 
 このJSONは、
  
-- `"kind":"Rectangle"`のペア
-- `"points": [...]`のペア
+- `"kind"`と`"Rectangle"`のペア
+- `"points`と`[...]`のペア
 
 からなるオブジェクトです。さらに、`"points"`に対応する値が**配列**になっていて、その中に以下の4つの要素が含まれています。
  
-- 名前が`"x"`で値が`0`、名前が`"y"`で値が`0`のペアからなるオブジェクト
-- 名前が`"x"`で値が`0`、名前が`"y"`で値が`100`のペアからなるオブジェクト
-- 名前が`"x"`で値が`100`、名前が`"y"`で値が`100`のペアからなるオブジェクト
-- 名前が`"x"`で値が`100`、名前が`"y"`で値が`0`のペアからなるオブジェクト
+- オブジェクト： `{"x":0,   "y":0}`
+- オブジェクト： `{"x":0,   "y":100}`
+- オブジェクト： `{"x":100, "y":100}`
+- オブジェクト： `{"x":100, "y":0}`
 
 配列は、`[]`で囲まれた要素の並びで、区切り文字は`,`です。
 
@@ -126,7 +126,7 @@ false
 
 前の節でJSONの概要について説明し終わったところで、いよいよJSONの文法について見ていきます。JSONの文法はECMA-404の仕様書に記載されていますが、ここでは、それを若干変形したBNFで表現されたJSONの文法を見ていきます。
 
-JSONのBNFによる定義を簡略化したものは以下で全てです。特に小数点以下の部分や指数部の部分は煩雑になる割に本質的でないので削除しました。
+JSONのBNFによる定義を簡略化したものは以下で全てです。特に小数点以下の部分は煩雑になる割に本質的でないので削除しました。
 
 ```bnf
 json = ws value ws;
@@ -137,7 +137,7 @@ value = true | false | null | object | array | number | string;
 string = ("\"\"" | "\"" CHAR+ "\"") ws;
 number = INT ws;
 true = "true" ws;
-false = "false" ws; // ここは修正済みのはずだが念のため
+false = "false" ws;
 null = "null" ws;
 
 COMMA = "," ws;
@@ -1701,9 +1701,10 @@ JSONの字句解析器である`SimpleTokenizer`はこのようにして実装�
 
 ```java
     private JsonAst.JsonTrue parseTrue() {
-        if(!tokenizer.current().equals(true)) {
+        if(!tokenizer.current().type.equals(Token.Type.TRUE)) {
             return JsonAst.JsonTrue.getInstance();
         }
+        if(currentToken.type == Token.Type.TRUE) {
         throw new parser.ParseException("expected: true, actual: " + tokenizer.current().value);
     }
 ```
@@ -1716,7 +1717,7 @@ JSONの字句解析器である`SimpleTokenizer`はこのようにして実装�
 
 ```java
     private JsonAst.JsonFalse parseFalse() {
-        if(!tokenizer.current().equals(false)) {
+        if(!tokenizer.current().type.equals(Token.Type.FALSE)) {
             return JsonAst.JsonFalse.getInstance();
         }
         throw new parser.ParseException("expected: false, actual: " + tokenizer.current().value);
@@ -1731,7 +1732,7 @@ JSONの字句解析器である`SimpleTokenizer`はこのようにして実装�
 
 ```java
   private JsonAst.JsonNull parseNull() {
-        if(tokenizer.current().value == null) {
+        if(tokenizer.current().type.equals(Token.Type.NULL)) {
             return JsonAst.JsonNull.getInstance();
         }
         throw new parser.ParseException("expected: null, actual: " + tokenizer.current().value);
