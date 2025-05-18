@@ -796,13 +796,13 @@ private JsonAst.JsonNull parseNull() {
 
 　このメソッドで行っていることを見ていきましょう。このメソッドでは、入力である`input`の現在位置が`"null"`という文字列で始まっているかをチェックします。もしそうなら、**JSONのnull**をあらわす`JsonAst.JsonNull`のインスタンスを返します。もし、先頭が`"null"`でなければ、構文解析は失敗なので例外を発生させますが、これは`recognize()`メソッドの中で行われています。`recognize()`の内部では、入力の現在位置と与えられた文字列を照合して、マッチしない場合例外を投げます。
 
-　次に、`skipWhitespace()`メソッドを呼び出して、「空白の読み飛ばし」を行っています。
+次に、`skipWhitespace()`メソッドを呼び出して、「空白の読み飛ばし」を行っています。
 
 　`recognize()`も`skipWhitespace()`も構文解析中に頻出する処理であるため、今回はそれぞれをメソッドにくくりだして、各構文解析メソッドの中で呼び出せるようにしました。
 
 ### 3.3.3 trueの構文解析メソッド
 
-`true`の構文解析は、次のような　`parseTrue()` メソッドとして定義します。
+`true`の構文解析は、次のような `parseTrue()` メソッドとして定義します。
 
 ```java
 private JsonAst.JsonTrue parseTrue() {
@@ -816,7 +816,7 @@ private JsonAst.JsonTrue parseTrue() {
 
 ### 3.3.4 falseの構文解析メソッド
 
-`false`の構文解析は、次のシグニチャを持つ　`parseFalse()` メソッドとして定義します。
+`false`の構文解析は、次のシグニチャを持つ `parseFalse()` メソッドとして定義します。
 
 ```java
 private JsonAst.JsonFalse parseFalse() {
@@ -830,7 +830,7 @@ private JsonAst.JsonFalse parseFalse() {
 
 ### 3.3.5 数値の構文解析メソッド
 
-数値の構文解析は、次のシグニチャを持つ　`parseNumber()` メソッドとして定義します。
+数値の構文解析は、次のシグニチャを持つ `parseNumber()` メソッドとして定義します。
 
 ```java
     private JsonAst.JsonNumber parseNumber() {
@@ -889,7 +889,7 @@ private JsonAst.JsonFalse parseFalse() {
 
 ### 3.3.6 文字列の構文解析メソッド
 
-文字列の構文解析は、次のシグニチャを持つ　`parseString()` メソッドとして定義します。
+文字列の構文解析は、次のシグニチャを持つ `parseString()` メソッドとして定義します。
 
 ```java
     private JsonAst.JsonString parseString() {
@@ -1026,7 +1026,7 @@ private JsonAst.JsonFalse parseFalse() {
 
 ### 3.3.7 配列の構文解析メソッド
 
-配列の構文解析は、次のシグニチャを持つ　`parseArray()` メソッドとして定義します。
+配列の構文解析は、次のシグニチャを持つ `parseArray()` メソッドとして定義します。
 
 ```java
     public JsonAst.JsonArray parseArray() {
@@ -1140,7 +1140,7 @@ array = LBRACKET RBRACKET | LBRACKET {value {COMMA value}} RBRACKET ;
 
 ### 3.3.8 オブジェクトの構文解析メソッド
 
-オブジェクトの構文解析は、次のシグニチャを持つ　`parseObject()` メソッドとして定義します。
+オブジェクトの構文解析は、次のシグニチャを持つ `parseObject()` メソッドとして定義します。
 
 ```java
     private JsonAst.JsonObject parseObject() {
@@ -1620,7 +1620,7 @@ public class SimpleJsonParser implements JsonParser {
 }
 ```
 
-構文解析器から呼び出されている`parserXXX()`メソッドを見るとわかりますが、字句解析器を導入したことによって、文字列の代わりにトークンの列を順によみ込んで、期待通りのトークンが現れたかを事前にチェックしています。また、この構文解析器には空白の読み飛ばしに関する処理が入っていないことに着目してください。
+構文解析器から呼び出されている`parserXXX()`メソッドを見るとわかりますが、字句解析器を導入したことによって、文字列の代わりにトークンの列を順に読み込んで、期待通りのトークンが現れたかを事前にチェックしています。また、この構文解析器には空白の読み飛ばしに関する処理が入っていないことに着目してください。
 
 PEG版と異なり、途中で失敗したら後戻り（バックトラック）するという処理も存在しません。後戻りによって、文法の柔軟性を増すというメリットがある一方、構文解析器の速度が落ちるというデメリットもあるため、字句解析器を用いた構文解析器は一般により高速に動作します（ただし、実装者の力量の影響も大きいです）。
 
@@ -1674,7 +1674,7 @@ public class SimpleJsonTokenizer implements JsonTokenizer {
 
 ### 3.5.6 moveNext
 
-`moveNext()` メソッドは、字句解析器の中核となるメソッドです。呼び出されると、次のトークンは発見するまで、文字列の位置を進め、トークンが発見されたら、トークンを`fetched`に格納して、`true`を返します。トークン列の終了位置に来たら`false`を返します。これは、`Iterator`パターンの一種とも言えますが、典型的な`Iterator`と異なり、`moveNext()`が副作用を持つ点がポイントでしょうか。この点は、.NETの`IEnumerator`のアプローチを参考にしました。
+`moveNext()` メソッドは、字句解析器の中核となるメソッドです。呼び出されると、次のトークンを発見するまで、文字列の位置を進め、トークンが発見されたら、トークンを`fetched`に格納して、`true`を返します。トークン列の終了位置に来たら`false`を返します。これは、`Iterator`パターンの一種とも言えますが、典型的な`Iterator`と異なり、`moveNext()`が副作用を持つ点がポイントでしょうか。この点は、.NETの`IEnumerator`のアプローチを参考にしました。
 
 ### 3.5.7 current
 
@@ -1803,7 +1803,7 @@ JSONの字句解析器である`SimpleTokenizer`はこのようにして実装�
 まず、最初のif文で、次のトークンが`{`であることを確認した後に、
 
 - その次のトークンが`}`であった場合：空オブジェクトを返す
-- それ以外の場合： `parsePair()` を呼び出し、 `string:pair` のようなペアを解析した後、以下のループに突入：
+- それ以外の場合： `parsePair()` を呼び出し、 `string:value` のようなペアを解析した後、以下のループに突入：
   - 次のトークンが`}`の場合、集めたペアのリストを引数として、`JsonAst.JsonObject()`オブジェクトを作って返す
   - それ以外で、次のトークンが`,`でない場合、構文エラーを投げて終了
   - それ以外の場合：次のトークンをフェッチして来て、`parsePair()`を呼び出して、ペアを解析した後、リストにペアを追加
