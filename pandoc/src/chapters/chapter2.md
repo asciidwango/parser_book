@@ -1,3 +1,5 @@
+<!-- Chapter 7: 第2章:構文解析の基本 -->
+
 # 第2章 構文解析の基本
 
 この章からいよいよ構文解析についての説明を始めたいと思います。とはいっても本書を手に取った皆様は構文解析についてまだ馴染みがないかと思います。そこで、まずは簡単な算術式の構文解析を例にして、構文解析の基本について学ぶことにしましょう。
@@ -65,7 +67,7 @@ BNFはFortranの開発者でもある、John Backus（ジョン・バッカス�
 
 のように単純化したBNFです。
 
-```bnf
+```text
 expression = term { ('+' | '-') term };
 term = factor { ('*' | '/') factor };
 factor = NUMBER | '(' expression ')';
@@ -112,7 +114,7 @@ expression = term, { ('+' | '-'), term };
 
 `term` は算術式の中で、掛け算や割り算を含んだ式を表す規則です。`factor`という規則を参照しています。
 
-```bnf
+```text
 term = factor { ('*' | '/') factor };
 ```
 
@@ -122,7 +124,7 @@ term = factor { ('*' | '/') factor };
 
 `factor`は算術式の中で、数値や括弧で囲まれた式を表す規則です。
 
-```bnf
+```text
 factor = NUMBER | '(' expression ')';
 ```
 
@@ -137,7 +139,7 @@ factor = NUMBER | '(' expression ')';
 
 `NUMBER`は数値を表す規則です。
 
-```bnf
+```text
 // 数値は1桁の整数に限定
 NUMBER = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9';
 ```
@@ -177,7 +179,7 @@ ParseResult expression(String input, int index);
 
 まず、最上位の規則`expression`を呼び出します。これは`expression("1+2")`となります。
 
-```bnf
+```text
 expression = term { ('+' | '-') term }
 ```
 
@@ -250,7 +252,7 @@ Stack: [
 
 規則`term`は以下のようになっています。
 
-```bnf
+```text
 term = factor { ('*' | '/' ) factor }
 ```
 
@@ -269,7 +271,7 @@ Stack: [
 
 規則`factor`は以下のようになっています。
 
-```bnf
+```text
 factor = NUMBER | '(' expression ')'
 ```
 
@@ -298,7 +300,7 @@ Stack: [
 
 規則`NUMBER`は以下のようになっています。
 
-```bnf
+```text
 NUMBER = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9'
 ```
 
@@ -321,7 +323,7 @@ Stack: [
 
 `NUMBER`から戻ってきた先は以下です。
 
-```bnf
+```text
 term = factor ↑ { ('*' | '/' ) factor }
 ```
 
@@ -345,7 +347,7 @@ Stack: [
 
 `term`の呼び出しから戻ってきた先は以下です。
 
-```bnf
+```text
 expression = term ↑ { ('+' | '-') term }
 ```
 
@@ -353,7 +355,7 @@ expression = term ↑ { ('+' | '-') term }
 
 7. 規則`term`を再び呼び出す
 
-```bnf
+```text
 expression = term { ('+' | '-') ↑ term }
 ```
 
@@ -365,13 +367,13 @@ expression = term { ('+' | '-') ↑ term }
 
 7.が終わった時点で規則の以下の位置にいます。
 
-```bnf
+```text
 expression = term { ('+' | '-') term ↑}
 ```
 
 ここでもう一回「繰り返す」かが問題ですが、既に入力文字列の終端に達しています。したがって、
 
-```bnf
+```text
 expression = term { ('+' | '-') term } ↑
 ```
 
@@ -402,7 +404,7 @@ expression = term { ('+' | '-') term } ↑
 
 たとえば、`1 + 2 * 3`という算術式の抽象構文木は以下のようになります。
 
-<img src="./img/chapter2/ast1.svg" width="50%" height="50%">
+![](img/chapter2/ast1.svg){ width=50% }
 
 抽象構文木の各ノードは、プログラムの構造を表現するためのデータ構造です。たとえば、`+`ノードは足し算を表し、`1`ノードは整数の`1`を表します。
 
@@ -430,7 +432,7 @@ expression = term { ('+' | '-') term } ↑
 
 改めて、先程の抽象構文木を見てみましょう。
 
-<img src="./img/chapter2/ast1.svg" width="50%" height="50%">
+![](img/chapter2/ast1.svg){ width=50% }
 
 この木構造では、`+`がルートノードであり、その左の子が`1`、右の子が`*`です。`*`ノードの子として`2`と`3`が配置されています。これにより、演算の優先順位が明確に表現されるわけです。
 

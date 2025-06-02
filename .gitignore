@@ -1,15 +1,39 @@
-node_modules/
-_book/
+# Pandoc/LaTeX generated files
+pandoc/build/*.pdf
+pandoc/build/*.html
+pandoc/build/*.tex
+pandoc/build/*.log
+pandoc/build/*.aux
+pandoc/build/*.toc
+pandoc/build/*.out
+
+# Java/Gradle build files
 *.class
 target/
 classes/
-.idea/
 .gradle/
 build/
+bin/
 
+# C generated files
 y.tab.c
+y.tab.h
 lex.yy.c
+a.out
 
+# IDE files
+.idea/
 .metals/
 .vscode/
 .scala-build/
+.claude/
+*.iml
+
+# OS generated files
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# Claude Code
+.claude/

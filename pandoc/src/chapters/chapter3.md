@@ -1,3 +1,5 @@
+<!-- Chapter 2: 第3章:JSONの構文解析 -->
+
 # 第3章 JSONの構文解析
 
 2章で構文解析に必要な基本概念について学ぶことができました。この章ではJSONという実際に使われている言語を題材に、より実践的な構文解析のやり方を学んでいきます。
@@ -128,7 +130,7 @@ false
 
 JSONのBNFによる定義を簡略化したものは以下で全てです。特に小数点以下の部分は煩雑になる割に本質的でないので削除しました。
 
-```bnf
+```text
 json = ws value ws;
 object = LBRACE RBRACE | LBRACE pair {COMMA pair} RBRACE;
 pair = STRING COLON value;
@@ -212,7 +214,7 @@ object = LBRACE RBRACE | LBRACE pair {COMMA pair} RBRACE;
 
 `pair`（ペア）は、JSONのオブジェクト内での`"x":1`に当たる部分を表現する規則です。`value`の定義については後述します。
 
-```bnf
+```text
 pair = string COLON value;
 ```
 
@@ -233,7 +235,7 @@ x:1 // 文字列リテラルでないといけない
 
 `COMMA`は、カンマを表す規則です。カンマそのものを表すには、単に`","`と書けばいいのですが、任意個の空白文字が続くことを表現したいため、規則`ws`（後述）を参照しています。
 
-```bnf
+```text
 COMMA = "," ws;
 ```
 
@@ -241,7 +243,7 @@ COMMA = "," ws;
 
 `array`は、JSONの値の配列を表す規則です。
 
-```bnf
+```text
 array = LBRACKET RBRACKET | LBRACKET value {COMMA value} RBRACKET ;
 ```
 
@@ -277,7 +279,7 @@ array = LBRACKET RBRACKET | LBRACKET value {COMMA value} RBRACKET ;
 
 ### 3.2.6 value
 
-```bnf
+```text
 value = true | false | null | number | string | object | array;
 ```
 
@@ -297,7 +299,7 @@ value = true | false | null | number | string | object | array;
 
 `true`は、真を表すリテラルを表す規則です。
 
-```bnf
+```text
 true = "true" ws;
 ```
 
@@ -307,7 +309,7 @@ true = "true" ws;
 
 `false`は、偽を表すリテラルを表す規則です。構造的には、`true`と同じです。
 
-```bnf
+```text
 false = "false" ws;
 ```
 
@@ -315,7 +317,7 @@ false = "false" ws;
 
 `null`は、ヌルリテラルを表す規則です。構造的には、`true`や`false`と同じです。
 
-```bnf
+```text
 null = "null" ws;
 ```
 
@@ -325,7 +327,7 @@ null = "null" ws;
 
 `number`は、数値リテラルを表す規則です。
 
-```bnf
+```text
 number = INT ws;
 ```
 
@@ -335,7 +337,7 @@ number = INT ws;
 
 `string`は文字列リテラルを表す規則です。
 
-```bnf
+```text
 string = ("\"\"" / "\"" CHAR+ "\"") ws;
 ```
 
@@ -1162,7 +1164,7 @@ return new JsonAst.JsonArray(values);
 
 多少複雑になりましたが、`parseArray()`の定義が、EBNFにおける表記
 
-```bnf
+```text
 array = LBRACKET RBRACKET | LBRACKET {value {COMMA value}} RBRACKET ;
 ```
 

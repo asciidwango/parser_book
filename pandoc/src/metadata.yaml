@@ -1,0 +1,57 @@
+---
+title: "構文解析のしくみ"
+author: "水島宏太"
+date: "2025年6月"
+publisher: "ASCII Dwango"
+documentclass: ltjsbook
+geometry: 
+  - margin=2cm
+lang: ja
+mainfont: "Latin Modern Roman"
+sansfont: "Latin Modern Sans"
+monofont: "Latin Modern Mono"
+CJKmainfont: "Noto Serif CJK JP"
+CJKsansfont: "Noto Sans CJK JP"
+CJKmonofont: "Noto Sans Mono CJK JP"
+classoption:
+  - oneside
+  - openany
+fontsize: 10pt
+linestretch: 1.2
+toc: true
+toc-depth: 3
+numbersections: true
+secnumdepth: 3
+highlight-style: tango
+codeBlockCaptions: true
+linkReferences: true
+nameInLink: true
+pdf-engine: lualatex
+pdf-engine-opts:
+  - --shell-escape
+
+# カスタム設定
+header-includes: |
+  \usepackage{luatexja-fontspec}
+  \usepackage{fancyhdr}
+  \usepackage{graphicx}
+  \usepackage{float}
+  \usepackage{longtable}
+  \usepackage{booktabs}
+  \usepackage{array}
+  \usepackage{multirow}
+  \usepackage{wrapfig}
+  \usepackage{colortbl}
+  \usepackage{pdflscape}
+  \usepackage{tabu}
+  \usepackage{threeparttable}
+  \usepackage{threeparttablex}
+  \usepackage[normalem]{ulem}
+  \usepackage{makecell}
+  \usepackage{xcolor}
+  \usepackage{listings}
+  \pagestyle{fancy}
+  \fancyhf{}
+  \fancyhead[C]{\thepage}
+  \renewcommand{\headrulewidth}{0pt}
+---

@@ -1,9 +1,0 @@
-{
-  "root": "./honkit",
-  "structure": {
-    "readme" : "README.md",
-    "summary": "SUMMARY.md"
-  },
-  "plugins": [],
-  "title": "構文解析の世界を探求しよう"
-}
