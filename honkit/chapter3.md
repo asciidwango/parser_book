@@ -779,7 +779,29 @@ public class PegJsonParser implements JsonParser {
 
 構文解析器を実装する方法としては、同じ入力文字列を与えれば同じ解析結果が返ってくるような関数型の実装方法と、今回のように、現在どこまで読み進めたかによって解析結果が変わる手続き型の方法があるのですが、手続き型の方が説明しやすいので、本書では手続き型の実装方法を採用しています。
 
-`progressive`で始まるフィールドは主にエラーメッセージをわかりやすくするためのものなので、現時点では気にする必要はありません。
+`progressiveCursor` と `progressiveException` フィールドは、主にエラー報告の質を向上させるために導入されています。`throwParseException` メソッド内で、現在の `cursor` がこれまでの `progressiveCursor` よりも進んでいれば、その位置で発生した例外を `progressiveException` として保存します。これにより、複数の解析経路を試行する中で最も深く（最も多くの文字を消費して）到達した箇所で発生したエラーを最終的なエラーとして報告することができます。例えば、`{"key": tru}` のような不正なJSONがあった場合、`parseValue` はまず `parseString` を試み、次に `parseNumber` を試み…と進み、最終的に `parseTrue` を試行します。この `parseTrue` の中で "tru" まで読み進んだ時点で "true" とのマッチに失敗し例外が発生します。このとき `progressiveCursor` は "tru" の末尾を指しているため、エラーメッセージにはより具体的なエラー位置（例: "expected: e, actual: EOF at position X" のように）を示す情報を含めることが可能になります。
+
+また、`parseValue()` メソッド内の実装に注目してください。
+
+```java
+    private JsonAst.JsonValue parseValue() {
+        int backup = cursor;
+        try {
+            return parseString();
+        } catch (ParseException e) {
+            cursor = backup;
+        }
+
+        try {
+            return parseNumber();
+        } catch (ParseException e) {
+            cursor = backup;
+        }
+        // ... (以下同様に parseObject, parseArray, parseTrue, parseFalse, parseNull と続く)
+        return parseNull();
+    }
+```
+これは、PEGにおける「順序付き選択 (Ordered Choice)」の挙動を模倣しています。BNFの `value = string | number | object | array | true | false | null;` という定義に対し、PEGではこの選択肢を左から順番に試行し、最初に成功したものが解析結果として採用されます。このコードでは、`parseString()` を試し、失敗したらカーソルを元に戻して `parseNumber()` を試す、というように、定義された順序で各解析メソッドを呼び出しています。この順序が重要であり、例えば `parseTrue()` よりも先に `parseString()` が試行されるため、`"true"` という入力は文字列ではなく真偽値として正しく解析されます（`parseString` は `"` で始まらないため失敗し、次に試行される `parseTrue` が成功する）。
 
 ### 3.3.2 nullの構文解析メソッド
 
@@ -885,7 +907,8 @@ private JsonAst.JsonFalse parseFalse() {
     }
 ```
 
-`parseNumber()` メソッド（PegJsonParser内）では、入力文字列から数値部分を読み取り、`Double.parseDouble` を用いて数値に変換しています。この実装は、ECMA-404で定義されるJSONの数値型の完全な仕様（小数部、指数部を含む）には対応しておらず、主に整数および一部の小数表現を扱えるように単純化されています。より厳密なパーサーでは、`BigDecimal` を使用したり、BNF定義に完全に準拠した数値解析ロジックを実装する必要がありますが、本書では構文解析の基本的な流れを理解することを優先しています。
+`parseNumber()` メソッド（PegJsonParser内）では、入力文字列から数値部分を読み取り、`Double.parseDouble` を用いて数値に変換しています。この実装は、ECMA-404で定義されるJSONの数値型の完全な仕様（小数部、指数部を含む）には対応しておらず、主に整数および一部の小数表現を扱えるように単純化されています。
+ECMA-404仕様では、数値は整数部、小数部（オプション）、指数部（オプション）を持つことができます。例えば、`-0.123e+10` のような形式も許容されます。本書の実装では簡単のため整数のみを対象としていますが、より厳密なパーサーでは、これらの形式に対応するために `BigDecimal` クラスを使用したり、BNF定義に完全に準拠した数値解析ロジック（小数点の有無、`e` または `E` に続く指数部の解析など）を実装する必要があります。例えば、`JsonAst.JsonNumber` の型を `BigDecimal` に変更し、`parseNumber` 内で `new BigDecimal(numberStr)` を使用するように修正することが考えられます。ただし、本書では構文解析の基本的な流れを理解することを優先しています。
 
 ### 3.3.6 文字列の構文解析メソッド
 
@@ -1000,12 +1023,19 @@ private JsonAst.JsonFalse parseFalse() {
 - `\` であるか（エスケープシーケンスか）
 - それ以外か
 
-を`switch`文で判定して分岐しています。JSONで使えるエスケープシーケンスは、
+を`switch`文で判定して分岐しています。JSONで使えるエスケープシーケンスは、ECMA-404仕様で以下のように定義されています。
 
-- `b`, `f`, `n`, `t`, `\`, `"`, `/`
-- `uxxxx` （ユニコードエスケープ）
+- `\"` (ダブルクォート)
+- `\\` (バックスラッシュ)
+- `\/` (スラッシュ)
+- `\b` (バックスペース)
+- `\f` (フォームフィード)
+- `\n` (ラインフィード)
+- `\r` (キャリッジリターン)
+- `\t` (水平タブ)
+- `\uXXXX` (4桁の16進数で表されるUnicode文字。サロゲートペアを表現する場合は `\uHHHH\uLLLL` のように2つのシーケンスを記述します)
 
-のいずれかに分かれているので、意味を読み取るのは簡単でしょう。
+`parseString` メソッド内の `switch` 文はこれらのエスケープシーケンスを処理しています。
 
 そして、`while`文が終わったあとで、
 
@@ -1624,6 +1654,90 @@ public class SimpleJsonParser implements JsonParser {
 
 PEG版と異なり、途中で失敗したら後戻り（バックトラック）するという処理も存在しません。後戻りによって、文法の柔軟性を増すというメリットがある一方、構文解析器の速度が落ちるというデメリットもあるため、字句解析器を用いた構文解析器は一般により高速に動作します（ただし、実装者の力量の影響も大きいです）。
 
+ここで、字句解析器と構文解析器の連携について、具体的なJSON文字列 `{"key": "value"}` を例に、その解析ステップを見てみましょう。
+
+**入力:** `{"key": "value"}`
+
+**1. `SimpleJsonParser.parse("{\"key\": \"value\"}")` が呼び出される。**
+   - `tokenizer = new SimpleJsonTokenizer("{\"key\": \"value\"}")` が実行される。
+   - `tokenizer.moveNext()` が呼び出される。
+     - `SimpleJsonTokenizer.moveNext()`:
+       - `index` は 0。`input.charAt(0)` は `{`。
+       - `accept("{", Token.Type.LBRACE, "{")` が呼び出される。
+       - `fetched` に `Token(LBRACE, "{")` が設定され、`index` は 1 になる。
+       - `true` を返す。
+   - `value = parseValue()` が呼び出される。
+
+**2. `SimpleJsonParser.parseValue()` 内:**
+   - `token = tokenizer.current()` により、`Token(LBRACE, "{")` を取得。
+   - `switch(token.type)` で `LBRACE` ケースが選択され、`parseObject()` が呼び出される。
+
+**3. `SimpleJsonParser.parseObject()` 内:**
+   - `tokenizer.current().type` は `LBRACE` なので最初の `if` はパス。
+   - `tokenizer.moveNext()` が呼び出される。
+     - `SimpleJsonTokenizer.moveNext()`:
+       - `index` は 1。`input.charAt(1)` は `"`。
+       - `tokenizeStringLiteral()` が呼び出される。
+         - `"key"` を読み取り、`fetched` に `Token(STRING, "key")` が設定され、`index` は 6 になる。
+         - `true` を返す。
+   - `tokenizer.current().type` は `RBRACE` ではない。
+   - `pair = parsePair()` が呼び出される。
+
+**4. `SimpleJsonParser.parsePair()` 内:**
+   - `keyToken = tokenizer.current()` により `Token(STRING, "key")` を取得。
+   - `key = new JsonAst.JsonString("key")` が作成される。
+   - `tokenizer.moveNext()` が呼び出される。
+     - `SimpleJsonTokenizer.moveNext()`:
+       - `index` は 6。`input.charAt(6)` は `:`。
+       - `accept(":", Token.Type.COLON, ":")` が呼び出される。
+       - `fetched` に `Token(COLON, ":")` が設定され、`index` は 7 になる。
+       - `true` を返す。
+   - `tokenizer.current().type` は `COLON` なので `if` はパス。
+   - `tokenizer.moveNext()` が呼び出される。
+     - `SimpleJsonTokenizer.moveNext()`:
+       - `index` は 7。`input.charAt(7)` は `"`。
+       - `tokenizeStringLiteral()` が呼び出される。
+         - `"value"` を読み取り、`fetched` に `Token(STRING, "value")` が設定され、`index` は 14 になる。
+         - `true` を返す。
+   - `value = parseValue()` が呼び出される。
+
+**5. `SimpleJsonParser.parseValue()` (2回目) 内:**
+   - `token = tokenizer.current()` により `Token(STRING, "value")` を取得。
+   - `switch(token.type)` で `STRING` ケースが選択され、`parseString()` が呼び出される。
+
+**6. `SimpleJsonParser.parseString()` 内:**
+   - `currentToken.type` は `STRING` なので `if` はパス。
+   - `tokenizer.moveNext()` が呼び出される。
+     - `SimpleJsonTokenizer.moveNext()`:
+       - `index` は 14。`input.charAt(14)` は `}`。
+       - `accept("}", Token.Type.RBRACE, "}")` が呼び出される。
+       - `fetched` に `Token(RBRACE, "}")` が設定され、`index` は 15 になる。
+       - `true` を返す。
+   - `new JsonAst.JsonString("value")` を返す。
+
+**7. `SimpleJsonParser.parsePair()` に戻る:**
+   - `value` に `JsonAst.JsonString("value")` が設定される。
+   - `new Pair<>(key, value)` を返す。
+
+**8. `SimpleJsonParser.parseObject()` に戻る:**
+   - `members` に `Pair(JsonString("key"), JsonString("value"))` が追加される。
+   - `tokenizer.moveNext()` が呼び出される。
+     - `SimpleJsonTokenizer.moveNext()`:
+       - `index` は 15。`input.length()` と等しいのでループを抜け `false` を返す。
+   - `while` ループの条件が `false` になりループ終了。
+   - `tokenizer.current().type` は `RBRACE` なので `if` はパス。
+   - `new JsonAst.JsonObject(members)` を返す。
+
+**9. `SimpleJsonParser.parseValue()` (1回目) に戻る:**
+   - `parseObject()` の結果を返す。
+
+**10. `SimpleJsonParser.parse()` に戻る:**
+    - `value` に `JsonObject` が設定される。
+    - `tokenizer.rest()` は `input.substring(15)` で空文字列 `""` を返す。
+    - `new ParseResult<>(value, "")` を返す。
+
+このように、`SimpleJsonTokenizer` が入力文字列をトークン列に順次変換し、`SimpleJsonParser` はそのトークン列を消費しながら構文構造を組み立てていきます。`SimpleJsonTokenizer` の `moveNext()` 内の `switch` 文で空白文字 (`' '`, `\t`, `\n`, `\r'`) が処理され `index` が進められるため、`SimpleJsonParser` は空白文字の存在を意識することなく、本質的な構文解析に集中できるというメリットがあります。
+
 ## 3.5 JSONの字句解析器
 
 JSONの字句解析器について、この節では、主要な部分に着目して説明します。
@@ -1874,5 +1988,19 @@ JSONの字句解析器である`SimpleTokenizer`はこのようにして実装�
 次の章では、文脈自由文法（Context-Free Grammar, CFG）の考え方について学んでもらいます。文脈自由文法は、現在使われているほとんどの構文解析アルゴリズムの基盤となっている概念であって、CFGの理解なくしては、その後の構文解析の理解もおぼつかないからです。
 
 逆に、CFGの考え方さえわかってしまえば、個別の構文解析アルゴリズム自体は、それほど難しいとは感じられなくなって来るかもしれません。
+
+---
+
+**演習問題**
+
+1.  **コメントのサポート:**
+    *   JSONのBNF定義を拡張し、`//` から行末までの単一行コメントと、`/*` から `*/` までの複数行コメントをサポートするようにしてください。
+    *   `PegJsonParser` と `SimpleJsonTokenizer` の両方を修正し、これらのコメントを正しく無視するように実装してください。
+    *   ヒント: `PegJsonParser` では `skipWhitespace` にコメントスキップのロジックを追加するか、各解析メソッドの適切な箇所でコメントを読み飛ばす処理を挟みます。`SimpleJsonTokenizer` では `moveNext` の `switch` 文に `/` のケースを追加し、そこからコメントの種別を判定して読み飛ばす処理を実装します。
+
+2.  **数値型の拡張:**
+    *   `PegJsonParser` の `parseNumber` メソッドと、`SimpleJsonTokenizer` の `tokenizeNumber` メソッドを修正し、ECMA-404仕様に準拠した数値型（小数部、指数部 `e` または `E` を含む）を正しく解析できるようにしてください。
+    *   `JsonAst.JsonNumber` の `value` フィールドの型を `double` から `java.math.BigDecimal` に変更し、精度が失われないように対応してください。
+    *   テストケースとして、`123`, `-0.5`, `1.2e3`, `0.4E-1` のような多様な数値表現を試してみてください。
 
 [^1]: ECMA-404 The JSON data interchange syntax 2nd edition, December 2017.  https://ecma-international.org/publications-and-standards/standards/ecma-404/

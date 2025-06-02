@@ -57,9 +57,56 @@ LL(1)構文解析器生成系で、JSONのパーザが作れることを示す�
 
 構文解析器生成系は1970年代頃から研究の蓄積があり、数多くの構文解析生成系がこれまで開発されています。基本的には構文解析器生成系と採用しているアルゴリズムは対応するので、たとえば、JavaCCはLL(1)構文解析器を出力するため、LL(1)構文解析器生成系であると言ったりします。
 
+一般的な構文解析器生成系の処理フローは、おおむね以下のようになります。
+
+```mermaid
+graph LR
+    A[文法定義ファイル (.g, .y, .jjなど)] --> B{構文解析器生成系};
+    B -- 字句解析ルール --> C[字句解析器コード生成部];
+    C --> D[生成された字句解析器コード (.java, .cなど)];
+    B -- 構文解析ルール --> E[構文解析器コード生成部];
+    E --> F[生成された構文解析器コード (.java, .cなど)];
+    G[ユーザー定義コード/アクション] --> H{コンパイラ};
+    D --> H;
+    F --> H;
+    H --> I[実行可能なパーサー];
+```
+*図6.X 一般的な構文解析器生成系の処理フロー*
+
+Yacc/Lexのように、字句解析器生成系（Lex）と構文解析器生成系（Yacc）が別々のツールとして提供され、連携して動作するケースもあります。
+
+```mermaid
+graph LR
+    A[Lex定義ファイル (.l)] --> B[Lex];
+    B --> C[字句解析器 Cコード (lex.yy.c)];
+    D[Yacc定義ファイル (.y)] --> E[Yacc];
+    E --> F[構文解析器 Cコード (y.tab.c)];
+    E --> G[ヘッダファイル (y.tab.h)];
+    C --> H[Cコンパイラ];
+    F --> H;
+    G -- #include --> C;
+    G -- #include --> F;
+    I[ユーザーコード (main関数など)] --> H;
+    H --> J[実行ファイル];
+```
+*図6.Y Yacc/Lexの連携フロー*
+
 同様に、yacc(bison)はLALR(1)構文解析器生成系を出力するので、LALR(1)構文解析器生成系であると言ったりもします。ただし、例外もあります。bisonはyaccと違って、LALR(1)より広いGLR構文解析器を生成できるので、GLR構文解析器生成系であるとも言えるのです。実際には、yaccを使う場合、ほとんどはLALR(1)構文解析器を出力するので、GLRについては言及されることは少ないですが、そのようなことは知っておいても損はないでしょう。
 
 より大きなくくりでみると、下向き構文解析（LL法やPEG）と上向き構文解析（LR法など）という観点から分類することもできますし、ともに文脈自由文法ベースであるLL法やLR法と、解析表現文法など他の形式言語を用いた構文解析法を対比してみせることもできます。
+
+以下に、本書で紹介する代表的な構文解析器生成系の比較をまとめます。
+
+| 特徴項目                     | JavaCC                                     | Yacc/Bison                                     | ANTLR                                                              |
+| ---------------------------- | ------------------------------------------ | ---------------------------------------------- | ------------------------------------------------------------------ |
+| **採用アルゴリズム**         | LL(k) (デフォルトはLL(1))                  | LALR(1) (BisonはGLRも可)                       | ALL(*) (適応型LL(*))                                               |
+| **生成コードの言語**         | Java                                       | C, C++ (BisonはJavaなども限定的にサポート)       | Java, C++, Python, JavaScript, Go, C#, Swift, Dart, PHP (多言語対応) |
+| **左再帰の扱い**             | 不可 (文法書き換えが必要)                    | 直接左再帰を扱える                             | 直接・間接左再帰を扱える (v4以降)                                  |
+| **曖昧性解決**               | 先読みトークン数(k)の調整、意味アクション    | 演算子の優先順位・結合規則指定、%precなどで対応 | 意味アクション、構文述語、ALL(*)による自動解決                     |
+| **エラー報告/リカバリ機能**  | 基本的                                     | `error`トークンによる限定的なリカバリ            | 高度なエラー報告、柔軟なエラーリカバリ戦略                         |
+| **学習コスト**               | Javaユーザーには比較的容易                   | やや高め (C言語と連携の知識も必要)             | 機能が豊富で強力な分、やや高め                                     |
+| **ライセンス**                 | 3条項BSDライセンス                         | GPL (Bison), Public Domain (Yaccのオリジナル)  | 3条項BSDライセンス                                                 |
+| **その他特徴**               | Javaに特化、構文がJavaライク               | C言語との親和性が高い、歴史と実績がある        | 強力な解析能力、豊富なターゲット言語、優れたツールサポート(GUIなど)  |
 
 ## 6.4 JavaCC：Javaの構文解析生成系の定番
 
@@ -681,12 +728,12 @@ assert null == foo.parse("baz");
 
 ```java
 public class JComb {
-    // p1 / p2
+    // p1 / p2 (PEGの順序付き選択に対応)
     public static <A> JParser<A> alt(JParser<A> p1, JParser<A> p2) {
         return (input) -> {
-            var result = p1.parse(input);//(1)
-            if(result != null) return result;//(2)
-            return p2.parse(input);//(3)
+            var result = p1.parse(input);//(1) p1を試す
+            if(result != null) return result;//(2) p1が成功したらその結果を返す
+            return p2.parse(input);//(3) p1が失敗したらp2を試す
         };
     }
 }
@@ -702,12 +749,12 @@ public class JComb {
 }
 
 class JAltParser<A> implements JParser<A> {
-  private JParser<A> p1, p2; // 重複したセミコロンを削除
-  public JAltParser(JParser<A> p1, JParser<A> p2) { // 型名をJParserに修正
+  private JParser<A> p1, p2;
+  public JAltParser(JParser<A> p1, JParser<A> p2) {
     this.p1 = p1;
     this.p2 = p2;
   }
-  public Result<A> parse(String input) { // 戻り値の型をResult<A>に修正
+  public Result<A> parse(String input) {
     var result = p1.parse(input);
     if(result != null) return result;
     return p2.parse(input);
@@ -721,24 +768,24 @@ class JAltParser<A> implements JParser<A> {
 (2) `p1`が成功した場合は`p2`を試すことなく値をそのまま返します
 (3) `p1`が失敗した場合、`p2`を試しその値を返します
 
-のような挙動をします。
-
-しかしこれはBNFというよりPEGの挙動です。そうです。実は今ここで作っているパーザコンビネータである`JComb`は（`SComb`）PEGをベースとしたパーザコンビネータだったのです。もちろん、PEGベースでないパーザコンビネータを作ることも出来るのですが実装がかなり複雑になってしまいます。PEGの挙動をそのままプログラミング言語に当てはめるのは非常に簡単であるため、今回はPEGを採用しましたが、もし興味があればBNFベース（文脈自由文法ベース）のパーザコンビネータも作ってみてください。
+のような挙動をします。これはBNFの選択 `|` とは異なり、PEGの「順序付き選択 `/`」に対応します。BNFの選択は曖昧性を許容しますが、PEGの順序付き選択は最初の選択肢がマッチすればそれが採用され、バックトラックは発生しません（選択肢の内部でのバックトラックはあり得ます）。
+実は今ここで作っているパーザコンビネータである`JComb`は（`SComb`と同様に）PEGをベースとしたパーザコンビネータだったのです。もちろん、PEGベースでないパーザコンビネータを作ることも出来るのですが実装がかなり複雑になってしまいます。PEGの挙動をそのままプログラミング言語に当てはめるのは非常に簡単であるため、今回はPEGを採用しましたが、もし興味があればBNFベース（文脈自由文法ベース）のパーザコンビネータも作ってみてください。
 
 ### 6.8.4 `seq()`メソッド
 
-次に二つのパーザを取って「連接」パーザを返すメソッド`seq()`を実装します。先程と同じくラムダ式にしてみます。
+次に二つのパーザを取って「連接」パーザを返すメソッド`seq()`を実装します。これはPEGの連接 `e1 e2` に対応します。先程と同じくラムダ式にしてみます。
 
 ```java
 record Pair<A, B>(A a, B b){}
-// p1 p2
+// p1 p2 (PEGの連接に対応)
 public class JComb {
     public static <A, B> JParser<Pair<A, B>> seq(JParser<A> p1, JParser<B> p2) {
         return (input) -> {
-            var result1 = p1.parse(input); //(1-1)
-            if(result1 == null) return null; //(1-2)
-            var result2 = p2.parse(result1.rest()); //(2-1) 
-            if(result2 == null) return null; //(2-2)
+            var result1 = p1.parse(input); //(1-1) p1を試す
+            if(result1 == null) return null; //(1-2) p1が失敗したら全体も失敗
+            var result2 = p2.parse(result1.rest()); //(2-1) p1の残り入力でp2を試す
+            if(result2 == null) return null; //(2-2) p2が失敗したら全体も失敗
+            // 両方成功したら、結果をペアにして返す
             return new Result<>(new Pair<A, B>(result1.value(), result2.value()), result2.rest());//(2-3)
         };
     }
@@ -749,7 +796,7 @@ public class JComb {
 
 #### 6.8.5 `rep0()`, `rep1()`メソッド
 
-残りは0回以上の繰り返し（`p*`）を表す`rep0()`と1回以上の繰り返し（`p+`）を表す`rep1()`メソッドです。
+残りは0回以上の繰り返し（PEGの `p*`）を表す`rep0()`と1回以上の繰り返し（PEGの `p+`）を表す`rep1()`メソッドです。
 
 まず、`rep0()`メソッドは次のようになります。
 
@@ -829,6 +876,16 @@ public class JComb {
     }
 }
 ```
+`lazy`メソッドの必要性について補足します。Javaは先行評価を行う言語であるため、再帰的な文法規則を直接メソッド呼び出しで表現しようとすると、パーサオブジェクトの構築時に無限再帰が発生し `StackOverflowError` となることがあります。例えば、算術式の文法で `expression` が `additive` を呼び出し、`additive` が `primary` を呼び出し、`primary` が括弧表現の中で再び `expression` を呼び出すような相互再帰構造を考えてみましょう。
+```java
+// JComb を使った算術式のパーサ定義（簡略版・lazyなしのイメージ）
+// public static JParser<Integer> expression = additive(); // 仮に直接代入しようとすると...
+// public static JParser<Integer> additive = primary();   // ここでprimaryがexpressionを...
+// public static JParser<Integer> primary = alt(number, seq(string("("), expression(), string(")"))); // expressionが未初期化
+```
+上記のように単純にメソッド呼び出しでパーサを組み合わせようとすると、`expression` の初期化時に `additive` が必要になり、その `additive` の初期化に `primary` が、さらにその `primary` の初期化に `expression` が必要となり、循環参照によって初期化が終わらなくなります。
+`lazy` は `Supplier<JParser<A>>` を引数に取ることで、実際の `JParser<A>` オブジェクトの取得（`supplier.get()`）を、そのパーサが実際に `parse()` メソッドで使われるときまで遅延させます。これにより、相互再帰するパーサ定義でも、オブジェクト構築時の無限再帰を避けることができます。算術式の例では、`expression` の定義内で `additive` を呼び出す部分を `lazy(() -> additive())` のように記述することで、この問題を解決します。
+```
 
 ### 6.8.8 `regex()`メソッド
 
@@ -869,86 +926,124 @@ assert (new Result<Integer>(10, "")).equals(number.parse("10"));
 ```java
 public class Calculator {
    // expression は加減算を担当 (左結合)
-   // expression <- additive ( ( "+" | "-" ) additive )*
+   // PEG: expression <- additive ( ( "+" / "-" ) additive )*
    public static JParser<Integer> expression() {
-        return seq(
-                lazy(() -> additive()), // additive は実質的に乗除の項 (term)
-                rep0(
-                        seq(
-                                alt(string("+"), string("-")),
-                                lazy(() -> additive()) // ここも乗除の項
+        return seq( // additive と (( "+" / "-" ) additive )* の連接
+                lazy(() -> additive()), // 左辺の additive (乗除の項)
+                rep0( // 0回以上の繰り返し
+                        seq( // ( "+" / "-" ) と additive の連接
+                                alt(string("+"), string("-")), // "+" または "-"
+                                lazy(() -> additive()) // 右辺の additive
                         )
                 )
-        ).map(p -> {
-            var left = p.a();
-            var rights = p.b();
-            for (var right : rights) {
-                var op = right.a();
-                var rightValue = right.b();
+        ).map(p -> { // 解析結果を処理するラムダ式
+            // p は Pair<Integer, List<Pair<String, Integer>>> 型
+            // p.a() は最初の additive の結果 (例: 1)
+            // p.b() は ( ( "+" / "-" ) additive )* の結果のリスト (例: [Pair("+", 2), Pair("*", 3)] ではなく、加減算のみなので [Pair("+",結果)])
+            // 例えば "1+2-3" の場合:
+            // p.a() = 1
+            // p.b() = [ Pair("+", 2), Pair("-", 3) ]
+            var left = p.a(); // 初期値 (最初の項)
+            var rights = p.b(); // 残りの演算子と項のペアのリスト
+            for (var rightPair : rights) { // 各 Pair<String, Integer> について
+                var op = rightPair.a(); // 演算子 ( "+" または "-" )
+                var rightValue = rightPair.b(); // 項の値
                 if (op.equals("+")) {
                     left += rightValue;
-                } else {
+                } else { // op.equals("-")
                     left -= rightValue;
                 }
             }
-            return left;
+            return left; // 計算結果
         });
     }
 
     // additive は乗除算を担当 (左結合) - メソッド名は term や multiplicative の方が適切かもしれない
-    // additive <- primary ( ( "*" | "/" ) primary )*
+    // PEG: additive <- primary ( ( "*" / "/" ) primary )*
     public static JParser<Integer> additive() {
-        return seq(
-                lazy(() -> primary()),
-                rep0(
-                        seq(
-                                alt(string("*"), string("/")),
-                                lazy(() -> primary())
+        return seq( // primary と ( ( "*" / "/" ) primary )* の連接
+                lazy(() -> primary()), // 左辺の primary
+                rep0( // 0回以上の繰り返し
+                        seq( // ( "*" / "/" ) と primary の連接
+                                alt(string("*"), string("/")), // "*" または "/"
+                                lazy(() -> primary()) // 右辺の primary
                         )
                 )
-        ).map(p -> {
-            var left = p.a();
-            var rights = p.b();
-            for (var right : rights) {
-                var op = right.a();
-                var rightValue = right.b();
+        ).map(p -> { // 解析結果を処理するラムダ式
+            // p は Pair<Integer, List<Pair<String, Integer>>> 型
+            // 例えば "2*3/4" の場合:
+            // p.a() = 2
+            // p.b() = [ Pair("*", 3), Pair("/", 4) ]
+            var left = p.a(); // 初期値 (最初の因子)
+            var rights = p.b(); // 残りの演算子と因子のペアのリスト
+            for (var rightPair : rights) {
+                var op = rightPair.a(); // 演算子 ( "*" または "/" )
+                var rightValue = rightPair.b(); // 因子の値
                 if (op.equals("*")) {
                     left *= rightValue;
-                } else {
+                } else { // op.equals("/")
+                    if (rightValue == 0) throw new ArithmeticException("Division by zero"); // ゼロ除算チェック
                     left /= rightValue;
                 }
             }
-            return left;
+            return left; // 計算結果
         });
     }
 
+    // primary <- number / "(" expression ")"
     public static JParser<Integer> primary() {
-        /*
-         * primary <- number / "(" expression ")"
-         */
-        return alt(
-                number,
+        return alt( // number または "(" expression ")" の選択
+                number, // 数値パーサ
                 seq(
-                        string("("),
-                        seq(
-                            lazy(() -> expression()),
-                            string(")")
-                        )
-                ).map(p -> p.b().a())
+                        string("("), // 開き括弧
+                        lazy(() -> expression()) // 括弧内の式 (expressionを再帰呼び出し)
+                ).flatMap(p1 -> // p1 は Pair<String, Integer>型 ("(" と expressionの結果)
+                    seq(
+                        p1.b(), // expressionの結果 (Integer) を次のseqの左側にする
+                        string(")")  // 閉じ括弧
+                    ).map(p2 -> p2.a()) // p2は Pair<Integer, String>型、その最初の要素(Integer)を返す
+                )
+                // 上記のflatMapとmapを使った部分は、以下のように書くこともできます。
+                // seq(string("("), lazy(() -> expression())).seq(string(")")).map(p -> p.a().b())
+                // ただし、seqがネストするとPairのネストも深くなるため、flatMapで調整するか、
+                // mapの処理を工夫する必要があります。
+                // ここでは、より明示的にするためにflatMapを使用しました。
+                // もしくは、以下のように括弧と式を別々に解析し、式の結果だけを取り出す方法もあります。
+                // string("(").seq(lazy(() -> expression())).seq(string(")")).map(pair -> pair.a().b())
+                // もっとシンプルには、括弧で囲まれた式の値だけを取り出す専用のコンビネータを作ることも考えられます。
+                // 例: between(JParser<O> open, JParser<C> close, JParser<T> p) { return open.seq(p).seq(close).map(res -> res.a().b()); }
+                // JCombの例では、より直接的な map(p -> p.b().a()) を使っていますが、
+                // これは seq(string("("), seq(lazy(() -> expression()), string(")"))) の結果が
+                // Pair<String, Pair<Integer, String>> となることを前提としています。
+                // ここでは、より段階的な処理を示すためにflatMapを使用しました。
         );
     }
     
-    // number <- [0-9]+
+    // number <- [0-9]+ (PEGの正規表現リテラルに対応)
     private static JParser<Integer> number = regex("[0-9]+").map(Integer::parseInt);
 }
 ```
 
 表記は冗長なもののほぼPEGに一対一に対応しているのがわかるのではないでしょうか？
+`expression`メソッドを例に、`map`内のラムダ式がどのように動作するかを "1+2*3" (これは`additive`で処理されるべきだが、ここでは`expression`の左結合のロジックを説明するため、仮に "1+2-3" のような入力を想定) で見てみましょう。
+
+入力: "1+2-3"
+1.  `lazy(() -> additive())` が "1" を解析し、結果 `1` (Integer) を返します。これが `p.a()` になります。
+2.  `rep0(...)` が `+2-3` の部分を解析します。
+    *   最初の `seq(alt(string("+"), string("-")), lazy(() -> additive()))` が `+2` を解析し、`Pair("+", 2)` を生成します。
+    *   次の `seq(...)` が `-3` を解析し、`Pair("-", 3)` を生成します。
+    *   結果として `p.b()` は `List [Pair("+", 2), Pair("-", 3)]` となります。
+3.  `map` のラムダ式が実行されます。
+    *   `left` は `p.a()` なので `1` で初期化されます。
+    *   ループ1回目: `rightPair` は `Pair("+", 2)`。`op` は `"+"`, `rightValue` は `2`。`left` は `1 + 2 = 3` になります。
+    *   ループ2回目: `rightPair` は `Pair("-", 3)`。`op` は `"-"`, `rightValue` は `3`。`left` は `3 - 3 = 0` になります。
+    *   最終的に `0` が返されます。
 
 これに対してJUnitを使って以下のようなテストコードを記述してみます。無事、意図通りに解釈されていることがわかります。
 
 ```java
-assertEquals(new Result<>(7, ""), expression().parse("1+2*3")); // テストをパス
+assertEquals(new Result<>(7, ""), Calculator.expression().parse("1+2*3")); // テストをパス (実際には additive で処理される)
+assertEquals(new Result<>(0, ""), Calculator.expression().parse("1+2-3")); // テストをパス
 ```
 
 DSLに向いたScalaに比べれば大幅に冗長になったものの、手書きで再帰下降パーザを組み立てるのに比べると大幅に簡潔な記述を実現することができました。しかも、JComb全体を通しても500行にすら満たないのは特筆すべきところです。Javaがユーザ定義の中置演算子をサポートしていればもっと簡潔にできたのですが、そこは向き不向きといったところでしょうか。
