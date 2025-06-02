@@ -26,7 +26,7 @@ JSONは元々は、JavaScriptのサブセットとして、オブジェクトに
 このJSONは、`name`と`"Kota Mizushima"`という文字列の**ペア**と、`age`と`41`という数値の**ペア**からなる**オブジェクト**であることを示しています。
 
 なお、用語については、ECMA-404の仕様書に記載されているものに準拠しています。名前/値のペアは、属性やプロパティと呼ばれることもあるので、適宜読み替えてください。
-日本語で表現すると、このオブジェクトは、名前が`Kota Mizushima`、年齢が`41`という人物一人分のデータを表していると考えることができます。オブジェクトは、`{}`で囲まれた、`name:value`の対が`,`を区切り文字として続く形になります。後述しますが、`name`の部分は**文字列**である必要があります。
+日本語で表現すると、このオブジェクトは、名前が`Kota Mizushima`、年齢が`41`という人物一人分のデータを表していると考えることができます。オブジェクトは、`{}`で囲まれた、`"name":value`の対が`,`を区切り文字として続く形になります。後述しますが、`name`の部分は**文字列**である必要があります。
 
 ### 3.1.2 配列
 
@@ -47,7 +47,7 @@ JSONは元々は、JavaScriptのサブセットとして、オブジェクトに
 このJSONは、
  
 - `"kind"`と`"Rectangle"`のペア
-- `"points`と`[...]`のペア
+- `"points"`と`[...]`のペア
 
 からなるオブジェクトです。さらに、`"points"`に対応する値が**配列**になっていて、その中に以下の4つの要素が含まれています。
  
@@ -338,7 +338,7 @@ number = INT ws;
 `string`は文字列リテラルを表す規則です。
 
 ```text
-string = ("\"\"" / "\"" CHAR+ "\"") ws;
+string = ("\"\"" | "\"" CHAR+ "\"") ws;
 ```
 
 `"`で始まって、`CHAR`で定義される文字が0個以上続いて、 `"` で終わります。`CHAR`の定義はBNF中に含まれており、エスケープシーケンスなどもここで定義されています。
@@ -1104,7 +1104,7 @@ parseLBracket();
 ```
 
 `recognize()`で、現在の入力位置が`[`と一致しているかチェックをした後、空白を読み飛ばしています。
-　
+
 この`recognize()`は、与えられた文字列リテラルが入力先頭とマッチするかをチェックし、マッチするなら入力を前に進めて、マッチしないなら例外を投げます。内部の実装は以下のようになります。
 
 ```java
@@ -1119,7 +1119,7 @@ parseLBracket();
     }
 ```
 
-　このようにすることで、マッチしない場合に例外を投げ、そうでなければ入力進めるという挙動を実装できます。`[`の次には任意の`JsonValue`または`"]"`が来る可能性があります。この時、まず最初に、`]`が来ると**仮定**するのがポイントです。
+このようにすることで、マッチしない場合に例外を投げ、そうでなければ入力を進めるという挙動を実装できます。`[`の次には任意の`JsonValue`または`"]"`が来る可能性があります。この時、まず最初に、`]`が来ると**仮定**するのがポイントです。
 
 ```java
         int backup = cursor;
@@ -1817,11 +1817,12 @@ JSONの字句解析器である`SimpleTokenizer`はこのようにして実装�
 
 ```java
     private JsonAst.JsonTrue parseTrue() {
-        if(!tokenizer.current().type.equals(Token.Type.TRUE)) {
-            return JsonAst.JsonTrue.getInstance();
-        }
+        Token currentToken = tokenizer.current();
         if(currentToken.type == Token.Type.TRUE) {
-        throw new parser.ParseException("expected: true, actual: " + tokenizer.current().value);
+            tokenizer.moveNext(); // トークンを消費
+            return new JsonAst.JsonTrue();
+        }
+        throw new parser.ParseException("expected: true, actual: " + currentToken.value);
     }
 ```
 
@@ -1833,10 +1834,12 @@ JSONの字句解析器である`SimpleTokenizer`はこのようにして実装�
 
 ```java
     private JsonAst.JsonFalse parseFalse() {
-        if(!tokenizer.current().type.equals(Token.Type.FALSE)) {
-            return JsonAst.JsonFalse.getInstance();
+        Token currentToken = tokenizer.current();
+        if(currentToken.type == Token.Type.FALSE) {
+            tokenizer.moveNext(); // トークンを消費
+            return new JsonAst.JsonFalse();
         }
-        throw new parser.ParseException("expected: false, actual: " + tokenizer.current().value);
+        throw new parser.ParseException("expected: false, actual: " + currentToken.value);
     }
 ```
 
@@ -1847,11 +1850,13 @@ JSONの字句解析器である`SimpleTokenizer`はこのようにして実装�
 `parseNull()`メソッドは、規則`NULL`に対応するメソッドで、JSONの`null`に対応するものを解析するメソッドでもあります。実装は以下のようになります：
 
 ```java
-  private JsonAst.JsonNull parseNull() {
-        if(tokenizer.current().type.equals(Token.Type.NULL)) {
-            return JsonAst.JsonNull.getInstance();
+    private JsonAst.JsonNull parseNull() {
+        Token currentToken = tokenizer.current();
+        if(currentToken.type == Token.Type.NULL) {
+            tokenizer.moveNext(); // トークンを消費
+            return new JsonAst.JsonNull();
         }
-        throw new parser.ParseException("expected: null, actual: " + tokenizer.current().value);
+        throw new parser.ParseException("expected: null, actual: " + currentToken.value);
     }
 ```
 
@@ -1862,9 +1867,14 @@ JSONの字句解析器である`SimpleTokenizer`はこのようにして実装�
 `parseString()`メソッドは、規則`STRING`に対応するメソッドで、JSONの`"..."`に対応するものを解析するメソッドでもあります。実装は以下のようになります：
 
 ```java
-   private JsonAst.JsonString parseString() {
-        return new JsonAst.JsonString((String)tokenizer.current().value);
-   }
+    private JsonAst.JsonString parseString() {
+        Token currentToken = tokenizer.current();
+        if (currentToken.type == Token.Type.STRING) {
+            tokenizer.moveNext(); // トークンを消費
+            return new JsonAst.JsonString((String)currentToken.value);
+        }
+        throw new parser.ParseException("expected: string, actual: " + currentToken.value);
+    }
 ```
 
 実装については、`parseTrue()`とほぼ同様なので説明は省略します。
@@ -1875,8 +1885,14 @@ JSONの字句解析器である`SimpleTokenizer`はこのようにして実装�
 
 ```java
     private JsonAst.JsonNumber parseNumber() {
-        var value = (Integer)tokenizer.current().value;
-        return new JsonAst.JsonNumber(value);
+        Token currentToken = tokenizer.current();
+        // SimpleJsonTokenizerの実装では数値はToken.Type.INTEGERとして扱われる
+        if (currentToken.type == Token.Type.INTEGER) {
+            tokenizer.moveNext(); // トークンを消費
+            // JsonNumberはdoubleを期待するが、tokenizerはintを返すのでキャスト
+            return new JsonAst.JsonNumber(((Number)currentToken.value).doubleValue());
+        }
+        throw new parser.ParseException("expected: number, actual: " + currentToken.value);
     }
 ```
 

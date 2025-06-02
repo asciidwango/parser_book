@@ -674,7 +674,7 @@ assert (new Result<>(new Pair<>("foo", "bar"), "")).equals(seq(string("foo"), st
 
 ```java
 <T> JParser<List<T>> rep1(JParser<T> p);
-assert (new Result<List<String>>(List.of("a", "a", "a"), "")).equals(rep1(string("a")).parse("aaa")); // .parse() を追加し、引数を修正
+assert (new Result<List<String>>(List.of("a", "a", "a"), "")).equals(rep1(string("a")).parse("aaa")); // .parse() を追加
 ```
 
 この節ではこれらのプリミティブなメソッドの実装方法について説明していきます。
@@ -865,7 +865,7 @@ interface JParser<R> {
 }
 ```
 
-(1)で`f.apply(result.value())`として値を加工しているのがポイントでしょうか。
+(1)で`f.apply(result.value())`として値を加工しているのがポイントです。
 
 ### 6.8.7 `lazy()`メソッド
 
@@ -878,6 +878,7 @@ public class JComb {
     }
 }
 ```
+
 `lazy`メソッドの必要性について補足します。Javaは先行評価を行う言語であるため、再帰的な文法規則を直接メソッド呼び出しで表現しようとすると、パーサオブジェクトの構築時に無限再帰が発生し `StackOverflowError` となることがあります。例えば、算術式の文法で `expression` が `additive` を呼び出し、`additive` が `primary` を呼び出し、`primary` が括弧表現の中で再び `expression` を呼び出すような相互再帰構造を考えてみましょう。
 ```java
 // JComb を使った算術式のパーサ定義（簡略版・lazyなしのイメージ）
@@ -887,7 +888,6 @@ public class JComb {
 ```
 上記のように単純にメソッド呼び出しでパーサを組み合わせようとすると、`expression` の初期化時に `additive` が必要になり、その `additive` の初期化に `primary` が、さらにその `primary` の初期化に `expression` が必要となり、循環参照によって初期化が終わらなくなります。
 `lazy` は `Supplier<JParser<A>>` を引数に取ることで、実際の `JParser<A>` オブジェクトの取得（`supplier.get()`）を、そのパーサが実際に `parse()` メソッドで使われるときまで遅延させます。これにより、相互再帰するパーサ定義でも、オブジェクト構築時の無限再帰を避けることができます。算術式の例では、`expression` の定義内で `additive` を呼び出す部分を `lazy(() -> additive())` のように記述することで、この問題を解決します。
-```
 
 ### 6.8.8 `regex()`メソッド
 
@@ -927,9 +927,9 @@ assert (new Result<Integer>(10, "")).equals(number.parse("10"));
 
 ```java
 public class Calculator {
-   // expression は加減算を担当 (左結合)
-   // PEG: expression <- additive ( ( "+" / "-" ) additive )*
-   public static JParser<Integer> expression() {
+    // expression は加減算を担当 (左結合)
+    // PEG: expression <- additive ( ( "+" / "-" ) additive )*
+    public static JParser<Integer> expression() {
         return seq( // additive と (( "+" / "-" ) additive )* の連接
                 lazy(() -> additive()), // 左辺の additive (乗除の項)
                 rep0( // 0回以上の繰り返し
@@ -1027,7 +1027,7 @@ public class Calculator {
 ```
 
 表記は冗長なもののほぼPEGに一対一に対応しているのがわかるのではないでしょうか？
-`expression`メソッドを例に、`map`内のラムダ式がどのように動作するかを "1+2*3" (これは`additive`で処理されるべきだが、ここでは`expression`の左結合のロジックを説明するため、仮に "1+2-3" のような入力を想定) で見てみましょう。
+`expression`メソッドを例に、`map`内のラムダ式がどのように動作するかを見てみましょう。演算子の優先順位により「1+2*3」は`additive`で乗算が先に処理されるため、ここでは左結合のロジックを説明するために「1+2-3」のような入力を想定します。
 
 入力: "1+2-3"
 1.  `lazy(() -> additive())` が "1" を解析し、結果 `1` (Integer) を返します。これが `p.a()` になります。
@@ -1048,7 +1048,7 @@ assertEquals(new Result<>(7, ""), Calculator.expression().parse("1+2*3")); // �
 assertEquals(new Result<>(0, ""), Calculator.expression().parse("1+2-3")); // テストをパス
 ```
 
-DSLに向いたScalaに比べれば大幅に冗長になったものの、手書きで再帰下降パーザを組み立てるのに比べると大幅に簡潔な記述を実現することができました。しかも、JComb全体を通しても500行にすら満たないのは特筆すべきところです。Javaがユーザ定義の中置演算子をサポートしていればもっと簡潔にできたのですが、そこは向き不向きといったところでしょうか。
+DSLに向いたScalaに比べれば冗長になったものの、手書きで再帰下降パーザを組み立てるのに比べると大幅に簡潔な記述を実現することができました。しかも、JComb全体を通しても500行にすら満たないのは特筆すべきところです。Javaがユーザ定義の中置演算子をサポートしていればもっと簡潔にできたのですが、そこは向き不向きといったところでしょうか。
 
 ### 6.9 まとめ
 
