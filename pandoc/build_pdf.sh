@@ -98,6 +98,8 @@ build_pdf() {
         --from markdown \
         --to pdf \
         --pdf-engine=lualatex \
+        --pdf-engine-opt=-shell-escape \
+        --template="$SCRIPT_DIR/templates/japanese.latex" \
         --output="$BUILD_DIR/parser_book.pdf" \
         --top-level-division=chapter \
         --verbose
@@ -143,6 +145,8 @@ EOF
         --from markdown \
         --to pdf \
         --pdf-engine=lualatex \
+        --pdf-engine-opt=-shell-escape \
+        --template="$SCRIPT_DIR/templates/japanese.latex" \
         --output="$BUILD_DIR/test_sample.pdf" \
         --top-level-division=chapter \
         --verbose
@@ -225,6 +229,10 @@ main() {
             ;;
         "help"|"-h"|"--help")
             show_help
+            ;;
+         "")
+            check_dependencies
+            build_pdf
             ;;
         *)
             echo "❌ 不明なオプション: $1"

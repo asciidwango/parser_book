@@ -154,6 +154,30 @@ $endif$
 $if(highlighting-macros)$
 $highlighting-macros$
 $endif$
+% Code blocks with rounded corners
+\usepackage{tcolorbox}
+\tcbuselibrary{skins,breakable}
+\definecolor{codebg}{RGB}{248,248,248}
+\definecolor{codeframe}{RGB}{204,204,204}
+\newtcolorbox{myquote}{
+  colback=codebg,
+  colframe=codeframe,
+  grow to right by=-10mm,
+  grow to left by=-10mm,
+  boxrule=1pt,
+  boxsep=0pt,
+  arc=2mm,
+  breakable,
+  enhanced,
+  before skip=10pt,
+  after skip=10pt,
+  left=5mm,
+  right=5mm,
+  top=5mm,
+  bottom=5mm
+}
+% Redefine Shaded environment for code blocks
+\renewenvironment{Shaded}{\begin{myquote}}{\end{myquote}}
 $if(tables)$
 \usepackage{longtable,booktabs,array}
 $if(multirow)$
@@ -277,6 +301,35 @@ $if(dir)$
   \newenvironment{LTR}{\beginL}{\endL}
 \fi
 $endif$
+% hyperref
+\usepackage{hyperref}
+\hypersetup{
+$if(title-meta)$
+  pdftitle={$title-meta$},
+$endif$
+$if(author-meta)$
+  pdfauthor={$author-meta$},
+$endif$
+$if(lang)$
+  pdflang={$lang$},
+$endif$
+$if(subject)$
+  pdfsubject={$subject$},
+$endif$
+$if(keywords)$
+  pdfkeywords={$for(keywords)$$keywords$$sep$, $endfor$},
+$endif$
+$if(colorlinks)$
+  colorlinks=true,
+  linkcolor={$if(linkcolor)$$linkcolor$$else$Maroon$endif$},
+  filecolor={$if(filecolor)$$filecolor$$else$Maroon$endif$},
+  citecolor={$if(citecolor)$$citecolor$$else$Blue$endif$},
+  urlcolor={$if(urlcolor)$$urlcolor$$else$Blue$endif$},
+$else$
+  hidelinks,
+$endif$
+  pdfcreator={LaTeX via pandoc}}
+\urlstyle{same} % disable monospaced font for URLs
 $if(natbib)$
 \usepackage[$natbiboptions$]{natbib}
 \bibliographystyle{$if(biblio-style)$$biblio-style$$else$plainnat$endif$}
