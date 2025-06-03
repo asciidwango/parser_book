@@ -35,30 +35,71 @@ check_dependencies() {
     echo "✅ 依存関係OK"
 }
 
+# 章ファイルを統合
+merge_chapters() {
+    echo "📚 章ファイルを統合しています..."
+    
+    CHAPTERS_DIR="$SRC_DIR/chapters"
+    BOOK_FILE="$SRC_DIR/book.md"
+    
+    # 書籍ファイルを初期化
+    cat > "$BOOK_FILE" << 'EOF'
+<!-- 
+このファイルは自動生成されています。
+直接編集せず、src/chapters/内の個別章ファイルを編集してください。
+生成コマンド: ./build_pdf.sh
+-->
+EOF
+    
+    # 各章を順番に追加
+    chapters=(
+        "chapter1.md"
+        "chapter2.md" 
+        "chapter3.md"
+        "chapter4.md"
+        "chapter5.md"
+        "chapter6.md"
+        "chapter7.md"
+        "chapter8.md"
+        "references.md"
+    )
+    
+    for chapter in "${chapters[@]}"; do
+        if [ -f "$CHAPTERS_DIR/$chapter" ]; then
+            echo "📄 追加中: $chapter"
+            echo "" >> "$BOOK_FILE"
+            echo "\\newpage" >> "$BOOK_FILE"
+            echo "" >> "$BOOK_FILE"
+            cat "$CHAPTERS_DIR/$chapter" >> "$BOOK_FILE"
+        else
+            echo "⚠️  警告: $chapter が見つかりません"
+        fi
+    done
+    
+    # 行数をカウント
+    line_count=$(wc -l < "$BOOK_FILE")
+    echo "✅ 統合完了: $BOOK_FILE ($line_count 行)"
+}
+
 # メイン処理
 build_pdf() {
     echo "🔧 PDFを生成しています..."
     
     cd "$SCRIPT_DIR"
     
-    # 統合されたMarkdownファイルが存在する場合
-    if [ -f "$SRC_DIR/book.md" ]; then
-        echo "📖 統合ファイル (book.md) からPDFを生成..."
-        pandoc \
-            "$SRC_DIR/metadata.yaml" \
-            "$SRC_DIR/book.md" \
-            --from markdown \
-            --to pdf \
-            --pdf-engine=lualatex \
-            --output="$BUILD_DIR/parser_book.pdf" \
-            --verbose
-    else
-        echo "📑 個別章ファイルからPDFを生成..."
-        # 将来的に個別ファイルを統合する場合の処理
-        echo "⚠️  まだbook.mdが作成されていません"
-        echo "次のフェーズで変換作業を行ってください"
-        exit 1
-    fi
+    # 章ファイルを統合
+    merge_chapters
+    
+    # 統合されたMarkdownファイルからPDFを生成
+    echo "📖 統合ファイル (book.md) からPDFを生成..."
+    pandoc \
+        "$SRC_DIR/metadata.yaml" \
+        "$SRC_DIR/book.md" \
+        --from markdown \
+        --to pdf \
+        --pdf-engine=lualatex \
+        --output="$BUILD_DIR/parser_book.pdf" \
+        --verbose
     
     echo "✅ PDF生成完了: $BUILD_DIR/parser_book.pdf"
 }
@@ -118,6 +159,9 @@ clean() {
 generate_preview() {
     echo "🌐 HTMLプレビューを生成中..."
     
+    # 章ファイルを統合
+    merge_chapters
+    
     pandoc \
         "$SRC_DIR/metadata.yaml" \
         "$SRC_DIR/book.md" \
@@ -137,17 +181,19 @@ show_help() {
 使用方法: $0 [オプション]
 
 オプション:
-  build       PDFを生成 (デフォルト)
+  build       章ファイルを統合してPDFを生成 (デフォルト)
   test        テスト用サンプルPDFを生成
-  preview     HTMLプレビューを生成
+  preview     章ファイルを統合してHTMLプレビューを生成
+  merge       章ファイルを統合のみ (PDFを生成しない)
   clean       ビルドディレクトリをクリーンアップ
   check       依存関係をチェック
   help        このヘルプを表示
 
 例:
-  $0              # PDFを生成
+  $0              # 章ファイルを統合してPDFを生成
   $0 test         # テスト用サンプルを生成
-  $0 preview      # HTMLプレビューを生成
+  $0 preview      # 章ファイルを統合してHTMLプレビューを生成
+  $0 merge        # 章ファイルの統合のみ
   $0 clean        # クリーンアップ
 EOF
 }
@@ -165,6 +211,9 @@ main() {
             ;;
         "preview")
             generate_preview
+            ;;
+        "merge")
+            merge_chapters
             ;;
         "clean")
             clean

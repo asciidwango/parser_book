@@ -14,7 +14,6 @@ pandoc/
 ├── templates/             # LaTeX/PDFテンプレート（カスタマイズ用）
 ├── filters/              # Pandocフィルター（カスタマイズ用）
 ├── build/                # 出力ディレクトリ
-├── merge_chapters.sh     # 章統合スクリプト
 ├── build_pdf.sh         # PDF生成スクリプト
 └── README.md            # このファイル
 ```
@@ -65,9 +64,6 @@ brew install --cask font-noto-sans-cjk-jp
 # 章を編集（src/chapters/*.md）
 vim src/chapters/chapter1.md
 
-# 章を統合してbook.mdを生成
-./merge_chapters.sh
-
 # PDFを生成
 ./build_pdf.sh build
 ```
@@ -108,8 +104,7 @@ xdg-open build/preview.html  # Linux
 
 **推奨ワークフロー**
 1. `src/chapters/` 内の個別章ファイルを編集
-2. `./merge_chapters.sh` で統合ファイル（book.md）を自動生成
-3. `./build_pdf.sh build` でPDFを生成
+2. `./build_pdf.sh build` でPDFを生成
 
 **注意**: `src/book.md` は自動生成されるファイルです。直接編集せず、必ず個別章ファイルを編集してください。
 
