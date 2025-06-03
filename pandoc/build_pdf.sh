@@ -99,6 +99,7 @@ build_pdf() {
         --to pdf \
         --pdf-engine=lualatex \
         --output="$BUILD_DIR/parser_book.pdf" \
+        --top-level-division=chapter \
         --verbose
     
     echo "✅ PDF生成完了: $BUILD_DIR/parser_book.pdf"
@@ -143,6 +144,7 @@ EOF
         --to pdf \
         --pdf-engine=lualatex \
         --output="$BUILD_DIR/test_sample.pdf" \
+        --top-level-division=chapter \
         --verbose
     
     echo "✅ テストサンプル生成完了: $BUILD_DIR/test_sample.pdf"
