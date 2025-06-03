@@ -6,6 +6,7 @@ pandoc/build/*.log
 pandoc/build/*.aux
 pandoc/build/*.toc
 pandoc/build/*.out
+src/book.md
 
 # Java/Gradle build files
 *.class
