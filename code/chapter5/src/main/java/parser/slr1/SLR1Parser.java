@@ -9,6 +9,7 @@ public class SLR1Parser {
     private final List<LR0ItemSet> states;
     private final Map<LR0ItemSet, Map<Expression, LR0ItemSet>> transitions;
     private final Map<String, Set<Expression>> followSets;
+    private final Map<String, Set<Expression>> firstSets = new HashMap<>();
     // EPSILONは内部計算用の空生成記号として扱います
     private static final Expression EPSILON = new Expression.Terminal("ε");
 
@@ -25,6 +26,8 @@ public class SLR1Parser {
         buildStates();
         // Follow集合を計算
         this.followSets = computeFollowSets();
+        // 構文解析表の競合をチェック
+        checkConflicts();
     }
 
     private void buildStates() {
@@ -39,18 +42,42 @@ public class SLR1Parser {
 
         while (!worklist.isEmpty()) {
             LR0ItemSet state = worklist.poll();
-            Map<Expression, LR0ItemSet> stateTransitions = new HashMap<>();
+            Map<Expression, Set<LR0Item>> itemsBySymbol = new HashMap<>();
+            
+            // 同じ記号で遷移するアイテムをグループ化
             for (LR0Item item : state.items()) {
                 Expression next = item.nextSymbol();
                 if (next != null) {
-                    LR0ItemSet nextState = new LR0ItemSet(Set.of(item.advance())).closure(grammar);
-                    if (!states.contains(nextState)) {
-                        states.add(nextState);
-                        worklist.add(nextState);
-                    }
-                    stateTransitions.put(next, nextState);
+                    itemsBySymbol.computeIfAbsent(next, k -> new HashSet<>()).add(item);
                 }
             }
+            
+            // 各記号に対して遷移先の状態を計算
+            Map<Expression, LR0ItemSet> stateTransitions = new HashMap<>();
+            for (Map.Entry<Expression, Set<LR0Item>> entry : itemsBySymbol.entrySet()) {
+                Expression symbol = entry.getKey();
+                Set<LR0Item> items = entry.getValue();
+                
+                // 同じ記号で遷移するすべてのアイテムを進める
+                Set<LR0Item> nextItems = new HashSet<>();
+                for (LR0Item item : items) {
+                    nextItems.add(item.advance());
+                }
+                
+                // クロージャを計算
+                LR0ItemSet nextState = new LR0ItemSet(nextItems).closure(grammar);
+                
+                // 新しい状態なら追加
+                int existingIndex = states.indexOf(nextState);
+                if (existingIndex == -1) {
+                    states.add(nextState);
+                    worklist.add(nextState);
+                    stateTransitions.put(symbol, nextState);
+                } else {
+                    stateTransitions.put(symbol, states.get(existingIndex));
+                }
+            }
+            
             transitions.put(state, stateTransitions);
         }
     }
@@ -123,12 +150,20 @@ public class SLR1Parser {
         return result;
     }
 
-    // 単一記号のFIRST集合を計算（再帰的に求めます）
+    // 単一記号のFIRST集合を計算（メモ化付き）
     private Set<Expression> firstOf(Expression symbol) {
-        Set<Expression> result = new HashSet<>();
         if (symbol instanceof Expression.Terminal) {
-            result.add(symbol);
+            return Set.of(symbol);
         } else if (symbol instanceof Expression.NonTerminal nt) {
+            // キャッシュをチェック
+            if (firstSets.containsKey(nt.name())) {
+                return firstSets.get(nt.name());
+            }
+            
+            // 計算中のマーカーとして空集合を設定（無限再帰防止）
+            firstSets.put(nt.name(), new HashSet<>());
+            
+            Set<Expression> result = new HashSet<>();
             for (Rule rule : grammar.rules()) {
                 if (rule.name().equals(nt.name())) {
                     if (rule.body().isEmpty()) {
@@ -138,16 +173,79 @@ public class SLR1Parser {
                     }
                 }
             }
+            
+            // 結果をキャッシュに保存
+            firstSets.put(nt.name(), result);
+            return result;
         }
-        return result;
+        return Set.of();
     }
 
+    // デバッグ用：FOLLOW集合を取得
+    public Map<String, Set<Expression>> getFollowSets() {
+        return followSets;
+    }
+    
+    // 構文解析表の競合をチェック
+    private void checkConflicts() {
+        boolean hasConflict = false;
+        StringBuilder conflictDetails = new StringBuilder();
+        
+        for (int i = 0; i < states.size(); i++) {
+            LR0ItemSet state = states.get(i);
+            Map<Expression, Set<String>> actions = new HashMap<>();
+            
+            // シフトアクションを収集
+            Map<Expression, LR0ItemSet> stateTransitions = transitions.get(state);
+            if (stateTransitions != null) {
+                for (Map.Entry<Expression, LR0ItemSet> entry : stateTransitions.entrySet()) {
+                    if (entry.getKey() instanceof Expression.Terminal) {
+                        actions.computeIfAbsent(entry.getKey(), k -> new HashSet<>())
+                                .add("shift to state " + states.indexOf(entry.getValue()));
+                    }
+                }
+            }
+            
+            // リデュースアクションを収集
+            for (LR0Item item : state.items()) {
+                if (item.nextSymbol() == null && !item.rule().equals(augmentedStartRule)) {
+                    Set<Expression> follow = followSets.get(item.rule().name());
+                    if (follow != null) {
+                        for (Expression lookahead : follow) {
+                            actions.computeIfAbsent(lookahead, k -> new HashSet<>())
+                                    .add("reduce by " + item.rule());
+                        }
+                    }
+                }
+            }
+            
+            // 競合を検出
+            for (Map.Entry<Expression, Set<String>> entry : actions.entrySet()) {
+                if (entry.getValue().size() > 1) {
+                    hasConflict = true;
+                    conflictDetails.append("Conflict in state ").append(i)
+                            .append(" on symbol ").append(entry.getKey()).append(":\n");
+                    for (String action : entry.getValue()) {
+                        conflictDetails.append("  - ").append(action).append("\n");
+                    }
+                }
+            }
+        }
+        
+        if (hasConflict) {
+            throw new IllegalStateException("SLR(1) conflicts detected:\n" + conflictDetails);
+        }
+    }
+    
     public boolean parse(List<Expression> input) {
         Stack<LR0ItemSet> stack = new Stack<>();
         stack.push(states.get(0));
 
         int index = 0;
-        while (index <= input.size()) {
+        int reductionCount = 0;
+        final int MAX_REDUCTIONS = 1000; // 無限ループ防止
+        
+        while (index <= input.size() && reductionCount < MAX_REDUCTIONS) {
             LR0ItemSet currentState = stack.peek();
             // 入力が尽きた場合はnullを終端記号とみなす
             Expression currentSymbol = index < input.size() ? input.get(index) : null;
@@ -182,14 +280,19 @@ public class SLR1Parser {
                                     stack.pop();
                                 }
                                 // Goto遷移を行う
-                                LR0ItemSet gotoState = transitions.get(stack.peek()).get(new Expression.NonTerminal(item.rule().name()));
-                                if (gotoState != null) {
-                                    stack.push(gotoState);
-                                    System.out.println("Goto state: " + gotoState);
-                                    reduced = true;
-                                    break;
-                                } else {
-                                    System.out.println("No Goto state found.");
+                                Map<Expression, LR0ItemSet> peekTransitions = transitions.get(stack.peek());
+                                if (peekTransitions != null) {
+                                    LR0ItemSet gotoState = peekTransitions.get(new Expression.NonTerminal(item.rule().name()));
+                                    if (gotoState != null) {
+                                        stack.push(gotoState);
+                                        System.out.println("Goto state: " + gotoState);
+                                        reduced = true;
+                                        reductionCount++;
+                                        break;
+                                    }
+                                }
+                                if (!reduced) {
+                                    System.out.println("No Goto state found for " + item.rule().name() + " from state " + stack.peek());
                                     return false;
                                 }
                             }
