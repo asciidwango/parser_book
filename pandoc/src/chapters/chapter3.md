@@ -1113,8 +1113,11 @@ parseLBracket();
             cursor += literal.length();
         } else {
             String substring = input.substring(cursor);
-            int endIndex = cursor + (literal.length() > substring.length() ? substring.length() : literal.length());
-            throwParseException("expected: " + literal + ", actual: " + input.substring(cursor, endIndex));
+            int endIndex = cursor + 
+                (literal.length() > substring.length() ? substring.length() : literal.length());
+            throwParseException(
+                "expected: " + literal + ", actual: " + input.substring(cursor, endIndex)
+            );
         }
     }
 ```
@@ -1570,22 +1573,32 @@ public class SimpleJsonParser implements JsonParser {
         if (currentToken.type == Token.Type.INTEGER) {
             tokenizer.moveNext(); // トークンを消費
             // JsonNumberはdoubleを期待するが、tokenizerはintを返すのでキャスト
-            return new JsonAst.JsonNumber(((Number)currentToken.value).doubleValue());
+            return new JsonAst.JsonNumber(
+                ((Number)currentToken.value).doubleValue()
+            );
         }
-        throw new parser.ParseException("expected: number, actual: " + currentToken.value);
+        throw new parser.ParseException(
+            "expected: number, actual: " + currentToken.value
+        );
     }
 
     private Pair<JsonAst.JsonString, JsonAst.JsonValue> parsePair() {
         // オブジェクトのキーは必ず文字列
         Token keyToken = tokenizer.current();
         if (keyToken.type != Token.Type.STRING) {
-            throw new parser.ParseException("expected: string for object key, actual: " + keyToken.value);
+            throw new parser.ParseException(
+                "expected: string for object key, actual: " + keyToken.value
+            );
         }
-        JsonAst.JsonString key = new JsonAst.JsonString((String)keyToken.value);
+        JsonAst.JsonString key = new JsonAst.JsonString(
+            (String)keyToken.value
+        );
         tokenizer.moveNext(); // キー文字列トークンを消費
 
         if(tokenizer.current().type != Token.Type.COLON) {
-            throw new parser.ParseException("expected: `:`, actual: " + tokenizer.current().value);
+            throw new parser.ParseException(
+                "expected: `:`, actual: " + tokenizer.current().value
+            );
         }
         tokenizer.moveNext();
         var value = parseValue();
@@ -1594,7 +1607,9 @@ public class SimpleJsonParser implements JsonParser {
 
     private JsonAst.JsonObject parseObject() {
         if(tokenizer.current().type != Token.Type.LBRACE) {
-            throw new parser.ParseException("expected `{`, actual: " + tokenizer.current().value);
+            throw new parser.ParseException(
+                "expected `{`, actual: " + tokenizer.current().value
+            );
         }
 
         tokenizer.moveNext();
@@ -1602,7 +1617,8 @@ public class SimpleJsonParser implements JsonParser {
             return new JsonAst.JsonObject(new ArrayList<>());
         }
 
-        List<Pair<JsonAst.JsonString, JsonAst.JsonValue>> members = new ArrayList<>();
+        List<Pair<JsonAst.JsonString, JsonAst.JsonValue>> members = 
+            new ArrayList<>();
         var pair= parsePair();
         members.add(pair);
 
@@ -1611,7 +1627,9 @@ public class SimpleJsonParser implements JsonParser {
                 return new JsonAst.JsonObject(members);
             }
             if(tokenizer.current().type != Token.Type.COMMA) {
-                throw new parser.ParseException("expected: `,`, actual: " + tokenizer.current().value);
+                throw new parser.ParseException(
+                    "expected: `,`, actual: " + tokenizer.current().value
+                );
             }
             tokenizer.moveNext();
             pair = parsePair();
@@ -1623,7 +1641,9 @@ public class SimpleJsonParser implements JsonParser {
 
     private JsonAst.JsonArray parseArray() {
         if(tokenizer.current().type != Token.Type.LBRACKET) {
-            throw new parser.ParseException("expected: `[`, actual: " + tokenizer.current().value);
+            throw new parser.ParseException(
+                "expected: `[`, actual: " + tokenizer.current().value
+            );
         }
 
         tokenizer.moveNext();
@@ -1640,7 +1660,9 @@ public class SimpleJsonParser implements JsonParser {
                 return new JsonAst.JsonArray(values);
             }
             if(tokenizer.current().type != Token.Type.COMMA) {
-                throw new parser.ParseException("expected: `,`, actual: " + tokenizer.current().value);
+                throw new parser.ParseException(
+                    "expected: `,`, actual: " + tokenizer.current().value
+                );
             }
             tokenizer.moveNext();
             value = parseValue();
@@ -1822,7 +1844,9 @@ JSONの字句解析器である`SimpleTokenizer`はこのようにして実装�
             tokenizer.moveNext(); // トークンを消費
             return new JsonAst.JsonTrue();
         }
-        throw new parser.ParseException("expected: true, actual: " + currentToken.value);
+        throw new parser.ParseException(
+            "expected: true, actual: " + currentToken.value
+        );
     }
 ```
 
@@ -1839,7 +1863,9 @@ JSONの字句解析器である`SimpleTokenizer`はこのようにして実装�
             tokenizer.moveNext(); // トークンを消費
             return new JsonAst.JsonFalse();
         }
-        throw new parser.ParseException("expected: false, actual: " + currentToken.value);
+        throw new parser.ParseException(
+            "expected: false, actual: " + currentToken.value
+        );
     }
 ```
 
@@ -1856,7 +1882,9 @@ JSONの字句解析器である`SimpleTokenizer`はこのようにして実装�
             tokenizer.moveNext(); // トークンを消費
             return new JsonAst.JsonNull();
         }
-        throw new parser.ParseException("expected: null, actual: " + currentToken.value);
+        throw new parser.ParseException(
+            "expected: null, actual: " + currentToken.value
+        );
     }
 ```
 
@@ -1873,7 +1901,9 @@ JSONの字句解析器である`SimpleTokenizer`はこのようにして実装�
             tokenizer.moveNext(); // トークンを消費
             return new JsonAst.JsonString((String)currentToken.value);
         }
-        throw new parser.ParseException("expected: string, actual: " + currentToken.value);
+        throw new parser.ParseException(
+            "expected: string, actual: " + currentToken.value
+        );
     }
 ```
 
@@ -1890,9 +1920,13 @@ JSONの字句解析器である`SimpleTokenizer`はこのようにして実装�
         if (currentToken.type == Token.Type.INTEGER) {
             tokenizer.moveNext(); // トークンを消費
             // JsonNumberはdoubleを期待するが、tokenizerはintを返すのでキャスト
-            return new JsonAst.JsonNumber(((Number)currentToken.value).doubleValue());
+            return new JsonAst.JsonNumber((
+                (Number)currentToken.value).doubleValue()
+            );
         }
-        throw new parser.ParseException("expected: number, actual: " + currentToken.value);
+        throw new parser.ParseException(
+            "expected: number, actual: " + currentToken.value
+        );
     }
 ```
 
@@ -1905,7 +1939,9 @@ JSONの字句解析器である`SimpleTokenizer`はこのようにして実装�
 ```java
     private JsonAst.JsonObject parseObject() {
         if(tokenizer.current().type != Token.Type.LBRACE) {
-            throw new parser.ParseException("expected `{`, actual: " + tokenizer.current().value);
+            throw new parser.ParseException(
+                "expected `{`, actual: " + tokenizer.current().value
+            );
         }
 
         tokenizer.moveNext();
@@ -1913,7 +1949,8 @@ JSONの字句解析器である`SimpleTokenizer`はこのようにして実装�
             return new JsonAst.JsonObject(new ArrayList<>());
         }
 
-        List<Pair<JsonAst.JsonString, JsonAst.JsonValue>> members = new ArrayList<>();
+        List<Pair<JsonAst.JsonString, JsonAst.JsonValue>> members = 
+            new ArrayList<>();
         var pair= parsePair();
         members.add(pair);
 
@@ -1922,7 +1959,9 @@ JSONの字句解析器である`SimpleTokenizer`はこのようにして実装�
                 return new JsonAst.JsonObject(members);
             }
             if(tokenizer.current().type != Token.Type.COMMA) {
-                throw new parser.ParseException("expected: `,`, actual: " + tokenizer.current().value);
+                throw new parser.ParseException(
+                    "expected: `,`, actual: " + tokenizer.current().value
+                );
             }
             tokenizer.moveNext();
             pair = parsePair();
@@ -1950,7 +1989,9 @@ JSONの字句解析器である`SimpleTokenizer`はこのようにして実装�
 ```java
     private JsonAst.JsonArray parseArray() {
         if(tokenizer.current().type != Token.Type.LBRACKET) {
-            throw new parser.ParseException("expected: `[`, actual: " + tokenizer.current().value);
+            throw new parser.ParseException(
+                "expected: `[`, actual: " + tokenizer.current().value
+            );
         }
 
         tokenizer.moveNext();
@@ -1967,7 +2008,9 @@ JSONの字句解析器である`SimpleTokenizer`はこのようにして実装�
                 return new JsonAst.JsonArray(values);
             }
             if(tokenizer.current().type != Token.Type.COMMA) {
-                throw new parser.ParseException("expected: `,`, actual: " + tokenizer.current().value);
+                throw new parser.ParseException(
+                    "expected: `,`, actual: " + tokenizer.current().value
+                );
             }
             tokenizer.moveNext();
             value = parseValue();
@@ -2019,6 +2062,5 @@ JSONの字句解析器である`SimpleTokenizer`はこのようにして実装�
 2.  **数値型の拡張:**
     *   `PegJsonParser` の `parseNumber` メソッドと、`SimpleJsonTokenizer` の `tokenizeNumber` メソッドを修正し、ECMA-404仕様に準拠した数値型（小数部、指数部 `e` または `E` を含む）を正しく解析できるようにしてください。
     *   `JsonAst.JsonNumber` の `value` フィールドの型を `double` から `java.math.BigDecimal` に変更し、精度が失われないように対応してください。
-    *   テストケースとして、`123`, `-0.5`, `1.2e3`, `0.4E-1` のような多様な数値表現を試してみてください。
-
+    *   テストケースとして、`123`, `-0.5`, `1.2e3`, `0.4E-1` のような多様な数値表現を試してみてください
 [^1]: ECMA-404 The JSON data interchange syntax 2nd edition, December 2017.  https://ecma-international.org/publications-and-standards/standards/ecma-404/

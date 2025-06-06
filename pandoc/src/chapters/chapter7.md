@@ -97,12 +97,15 @@ Pythonでは字句解析のときにインデントを`<INDENT>`（インデン�
 
 ```
 <CLASS> <NAME:Point> <COLON> <NEWLINE> <INDENT>
-  <DEF> <NAME:__init__> <LPAREN> <NAME:self> <COMMA> <NAME:x> <COMMA> <NAME:y> <RPAREN> <COLON> <NEWLINE> <INDENT>
+  <DEF> <NAME:__init__> 
+    <LPAREN> <NAME:self> <COMMA> <NAME:x> <COMMA> <NAME:y> <RPAREN> 
+    <COLON> <NEWLINE> <INDENT>
     <NAME:self> <DOT> <NAME:x> <ASSIGN> <NAME:x> <NEWLINE>
     <NAME:self> <DOT> <NAME:y> <ASSIGN> <NAME:y> <NEWLINE>
   <DEDENT>
 <DEDENT>
 ```
+
 （`<NAME:A>`は識別子A、`<COLON>`はコロン、`<NEWLINE>`は改行、`<ASSIGN>`は代入演算子を表すトークンとします。実際にはさらに詳細なトークン分割が行われます。）
 このように、インデント/デデントトークンがブロック構造を示すため、構文解析器は括弧の対応付けに似た形で処理できます。
 
@@ -324,8 +327,12 @@ enum lex_state_e {
 //add ::= term {"+" term | "-" term}
 lazy val add: Parser[AST] = rule{
   chainl(term)(
-    (%% << CL(PLUS)) ^^ { location => (left: AST, right: AST) => BinaryExpression(location, Operator.ADD, left, right) } |
-    (%% << CL(MINUS)) ^^ { location => (left: AST, right: AST) => BinaryExpression(location, Operator.SUBTRACT, left, right) }
+    (%% << CL(PLUS)) ^^ { location => (left: AST, right: AST) => 
+        BinaryExpression(location, Operator.ADD, left, right) 
+    } 
+  | (%% << CL(MINUS)) ^^ { location => (left: AST, right: AST) => 
+        BinaryExpression(location, Operator.SUBTRACT, left, right) 
+    }
   )
 }
 ```

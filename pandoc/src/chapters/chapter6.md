@@ -161,9 +161,9 @@ public int add() :
 public int mult() :
 {int r = 0; int v = 0;}
 {
-    r=primary() ( <MULTIPLY> v=primary() { r *= v; }| <DIVIDE> v=primary() { r /= v; })* { // 修正: DIVIDE の右辺も v=primary()
-        return r;
-    }
+   r=primary() ( 
+     <MULTIPLY> v=primary() { r *= v; }
+   | <DIVIDE> v=primary() { r /= v; })* { return r; }
 }
 
 public int primary() :
@@ -202,21 +202,27 @@ public class CalculatorTest {
     @Test
     @Description("1 + 2 * 3 = 7")
     public void test1() throws Exception {
-        Calculator calculator = new Calculator(new StringReader("1 + 2 * 3"));
+        Calculator calculator = new Calculator(
+            new StringReader("1 + 2 * 3"))
+        ;
         assertEquals(7, calculator.expression());
     }
 
     @Test
     @Description("(1 + 2) * 4 = 12")
     public void test2() throws Exception {
-        Calculator calculator = new Calculator(new StringReader("(1 + 2) * 4"));
+        Calculator calculator = new Calculator(
+            new StringReader("(1 + 2) * 4")
+        );
         assertEquals(12, calculator.expression());
     }
 
     @Test
     @Description("(5 * 6) - (3 + 4) = 23")
     public void test3() throws Exception {
-        Calculator calculator = new Calculator(new StringReader("(5 * 6) - (3 + 4)"));
+        Calculator calculator = new Calculator(
+            new StringReader("(5 * 6) - (3 + 4)")
+        );
         assertEquals(23, calculator.expression());
     }
 }
@@ -517,9 +523,11 @@ WS  :   [ \t\n\r]+ -> skip ;
 
 `PeitXML`の名の通り、属性やテキストなどは全く扱うことができず、`<a>`や`<a/>`、`<a><b></b></a>`といった要素のみを扱うことができます。規則`element`が重要です。
 
-```
+```java
 element returns [Element e]
-    : ('<' begin=NAME '>' es=elements '</' end=NAME '>' {$begin.text.equals($end.text)}?
+    : ('<' begin=NAME '>' es=elements '</' end=NAME '>' {
+            $begin.text.equals($end.text)
+       }?
       {$e = new Element($begin.text, $es.es);})
     | ('<' name=NAME '/>' {$e = new Element($name.text);})
     ;
@@ -532,7 +540,9 @@ ANTLRでは通常のLLパーザで文法を記述する上での大きな制約�
 また、`ALL(*)`アルゴリズム自体とは関係ありませんが、XMLのパーザを書くときには開きタグと閉じタグの名前が一致している必要があります。この条件を記述するために`PetitXML`では次のように記述されています。
 
 ```java 
-'<' begin=NAME '>' es=elements '</' end=NAME '>' {$begin.text.equals($end.text)}?
+'<' begin=NAME '>' es=elements '</' end=NAME '>' {
+  $begin.text.equals($end.text)
+}?
 ```
 
 この中の`{$begin.text.equals($end.text)}?`という部分はsemantic predicateと呼ばれ、プログラムとして書かれた条件式が真になるときにだけマッチします。semantic predicateのような機能はプログラミング言語をそのまま埋め込むという意味で、正直「あまり綺麗ではない」と思わなくもないですが、実用上はsemantic predicateを使いたくなる場面にしばしば遭遇します。
@@ -642,7 +652,9 @@ assert new Result<String>("123", "").equals(string("123").parse("123"));
 
 ```java
 <T, U> JParser<U> map(Parser<T> parser, Function<T, U> function);
-assert (new Result<Integer>(123, "")).equals(map(string("123"), v -> Integer.parseInt(v)).parse("123"));
+assert (new Result<Integer>(123, "")).equals(
+    map(string("123"), v -> Integer.parseInt(v)).parse("123")
+);
 ```
 
 これは構文解析器生成系でセマンティックアクションを書くのに相当すると言えるでしょう。
@@ -651,30 +663,34 @@ BNFで`a | b`、つまり選択を書くのに相当するメソッドも必要�
 
 ```java
 <T> JParser<T> alt(JParser<T> p1, JParser<T> p2); // 引数名と型名を修正
-assert (new Result<String>("bar", "")).equals(alt(string("foo"), string("bar")).parse("bar")); // .parse() を追加
+assert (new Result<String>("bar", "")).equals(
+    alt(string("foo"), string("bar")).parse("bar")
+); // .parse() を追加
 ```
 
 同様に、BNFで`a b`、つまり連接」を書くのに相当するメソッドも必要ですが、これは次のような`seq()`メソッドとして提供します。
 
 ```java
 record Pair<A, B>(A a, B b){}
-<A, B> JParser<Pair<A, B>> seq(JParser<A> p1, JParser<B> p2); // 型パラメータを修正
-assert (new Result<>(new Pair<>("foo", "bar"), "")).equals(seq(string("foo"), string("bar")).parse("foobar")); // .parse() を追加
+<A, B> JParser<Pair<A, B>> seq(JParser<A> p1, JParser<B> p2);
+assert (new Result<>(new Pair<>("foo", "bar"), "")).equals(
+    seq(string("foo"), string("bar")).parse("foobar")
+);
 ```
 
 最後に、BNFで`a*`、つまり0回以上の繰り返しに相当する`rep0()`メソッド
-（注意: `string("")` を `rep0` に渡すと無限ループの可能性があるため、アサーション例はより安全なものに変更するか、`string("")` の挙動を明確にする必要があります。ここではアサーション例をコメントアウトします。）
+
 ```java
 <T> JParser<List<T>> rep0(JParser<T> p);
-// assert (new Result<List<String>>(List.of(), "abc")).equals(rep0(string("x")).parse("abc")); // "x" がマッチしない場合
-// assert (new Result<List<String>>(List.of("a","a"), "bc")).equals(rep0(string("a")).parse("aabc"));
 ```
 
 や`a+`、つまり1回以上の繰り返しに相当する`rep1()`メソッドもほしいところです。
 
 ```java
 <T> JParser<List<T>> rep1(JParser<T> p);
-assert (new Result<List<String>>(List.of("a", "a", "a"), "")).equals(rep1(string("a")).parse("aaa")); // .parse() を追加
+assert (new Result<List<String>>(List.of("a", "a", "a"), "")).equals(
+  rep1(string("a")).parse("aaa")
+);
 ```
 
 この節ではこれらのプリミティブなメソッドの実装方法について説明していきます。
@@ -899,7 +915,9 @@ public class JComb {
         return (input) -> {
             var matcher = Pattern.compile(regex).matcher(input);
             if(matcher.lookingAt()) {
-                return new Result<>(matcher.group(), input.substring(matcher.end()));
+                return new Result<>(
+                    matcher.group(), input.substring(matcher.end())
+                );
             } else {
                 return null;
             }
@@ -928,23 +946,17 @@ assert (new Result<Integer>(10, "")).equals(number.parse("10"));
 ```java
 public class Calculator {
     // expression は加減算を担当 (左結合)
-    // PEG: expression <- additive ( ( "+" / "-" ) additive )*
+    // PEG: expression <- multitive ( ( "+" / "-" ) multitive )*
     public static JParser<Integer> expression() {
-        return seq( // additive と (( "+" / "-" ) additive )* の連接
-                lazy(() -> additive()), // 左辺の additive (乗除の項)
+        return seq( // multitive と (( "+" / "-" ) multitive )* の連接
+                lazy(() -> multitive()), // 左辺の multitive (乗除の項)
                 rep0( // 0回以上の繰り返し
-                        seq( // ( "+" / "-" ) と additive の連接
+                        seq( // ( "+" / "-" ) と multitive の連接
                                 alt(string("+"), string("-")), // "+" または "-"
-                                lazy(() -> additive()) // 右辺の additive
+                                lazy(() -> multitive()) // 右辺の multitive
                         )
                 )
         ).map(p -> { // 解析結果を処理するラムダ式
-            // p は Pair<Integer, List<Pair<String, Integer>>> 型
-            // p.a() は最初の additive の結果 (例: 1)
-            // p.b() は ( ( "+" / "-" ) additive )* の結果のリスト (例: [Pair("+", 2), Pair("*", 3)] ではなく、加減算のみなので [Pair("+",結果)])
-            // 例えば "1+2-3" の場合:
-            // p.a() = 1
-            // p.b() = [ Pair("+", 2), Pair("-", 3) ]
             var left = p.a(); // 初期値 (最初の項)
             var rights = p.b(); // 残りの演算子と項のペアのリスト
             for (var rightPair : rights) { // 各 Pair<String, Integer> について
@@ -960,9 +972,9 @@ public class Calculator {
         });
     }
 
-    // additive は乗除算を担当 (左結合) - メソッド名は term や multiplicative の方が適切かもしれない
-    // PEG: additive <- primary ( ( "*" / "/" ) primary )*
-    public static JParser<Integer> additive() {
+    // multitive は乗除算を担当 (左結合)
+    // PEG: multitive <- primary ( ( "*" / "/" ) primary )*
+    public static JParser<Integer> multitive() {
         return seq( // primary と ( ( "*" / "/" ) primary )* の連接
                 lazy(() -> primary()), // 左辺の primary
                 rep0( // 0回以上の繰り返し
@@ -972,10 +984,6 @@ public class Calculator {
                         )
                 )
         ).map(p -> { // 解析結果を処理するラムダ式
-            // p は Pair<Integer, List<Pair<String, Integer>>> 型
-            // 例えば "2*3/4" の場合:
-            // p.a() = 2
-            // p.b() = [ Pair("*", 3), Pair("/", 4) ]
             var left = p.a(); // 初期値 (最初の因子)
             var rights = p.b(); // 残りの演算子と因子のペアのリスト
             for (var rightPair : rights) {
@@ -984,7 +992,8 @@ public class Calculator {
                 if (op.equals("*")) {
                     left *= rightValue;
                 } else { // op.equals("/")
-                    if (rightValue == 0) throw new ArithmeticException("Division by zero"); // ゼロ除算チェック
+                    if (rightValue == 0) 
+                        throw new ArithmeticException("Division by zero"); 
                     left /= rightValue;
                 }
             }
@@ -997,37 +1006,27 @@ public class Calculator {
         return alt( // number または "(" expression ")" の選択
                 number, // 数値パーサ
                 seq(
-                        string("("), // 開き括弧
-                        lazy(() -> expression()) // 括弧内の式 (expressionを再帰呼び出し)
-                ).flatMap(p1 -> // p1 は Pair<String, Integer>型 ("(" と expressionの結果)
+                    string("("), // 開き括弧
+                    // 括弧内の式 (expressionを再帰呼び出し)
+                    lazy(() -> expression()) 
+                ).flatMap(p1 -> 
+                    // p1 は Pair<String, Integer>型 ("(" と expressionの結果)
                     seq(
                         p1.b(), // expressionの結果 (Integer) を次のseqの左側にする
                         string(")")  // 閉じ括弧
-                    ).map(p2 -> p2.a()) // p2は Pair<Integer, String>型、その最初の要素(Integer)を返す
+                    // p2は Pair<Integer, String>型、その最初の要素(Integer)を返す
+                    ).map(p2 -> p2.a()) 
                 )
-                // 上記のflatMapとmapを使った部分は、以下のように書くこともできます。
-                // seq(string("("), lazy(() -> expression())).seq(string(")")).map(p -> p.a().b())
-                // ただし、seqがネストするとPairのネストも深くなるため、flatMapで調整するか、
-                // mapの処理を工夫する必要があります。
-                // ここでは、より明示的にするためにflatMapを使用しました。
-                // もしくは、以下のように括弧と式を別々に解析し、式の結果だけを取り出す方法もあります。
-                // string("(").seq(lazy(() -> expression())).seq(string(")")).map(pair -> pair.a().b())
-                // もっとシンプルには、括弧で囲まれた式の値だけを取り出す専用のコンビネータを作ることも考えられます。
-                // 例: between(JParser<O> open, JParser<C> close, JParser<T> p) { return open.seq(p).seq(close).map(res -> res.a().b()); }
-                // JCombの例では、より直接的な map(p -> p.b().a()) を使っていますが、
-                // これは seq(string("("), seq(lazy(() -> expression()), string(")"))) の結果が
-                // Pair<String, Pair<Integer, String>> となることを前提としています。
-                // ここでは、より段階的な処理を示すためにflatMapを使用しました。
         );
     }
     
     // number <- [0-9]+ (PEGの正規表現リテラルに対応)
-    private static JParser<Integer> number = regex("[0-9]+").map(Integer::parseInt);
+    private static JParser<Integer> number = 
+        regex("[0-9]+").map(Integer::parseInt);
 }
 ```
 
-表記は冗長なもののほぼPEGに一対一に対応しているのがわかるのではないでしょうか？
-`expression`メソッドを例に、`map`内のラムダ式がどのように動作するかを見てみましょう。演算子の優先順位により「1+2*3」は`additive`で乗算が先に処理されるため、ここでは左結合のロジックを説明するために「1+2-3」のような入力を想定します。
+表記は冗長なもののほぼPEGに一対一に対応しているのがわかるのではないでしょうか？`expression`メソッドを例に、`map`内のラムダ式がどのように動作するかを見てみましょう。演算子の優先順位により「1+2*3」は`additive`で乗算が先に処理されるため、ここでは左結合のロジックを説明するために「1+2-3」のような入力を想定します。
 
 入力: "1+2-3"
 1.  `lazy(() -> additive())` が "1" を解析し、結果 `1` (Integer) を返します。これが `p.a()` になります。
@@ -1044,8 +1043,12 @@ public class Calculator {
 これに対してJUnitを使って以下のようなテストコードを記述してみます。無事、意図通りに解釈されていることがわかります。
 
 ```java
-assertEquals(new Result<>(7, ""), Calculator.expression().parse("1+2*3")); // テストをパス (実際には additive で処理される)
-assertEquals(new Result<>(0, ""), Calculator.expression().parse("1+2-3")); // テストをパス
+assertEquals(
+    new Result<>(7, ""), Calculator.expression().parse("1+2*3")
+); // テストをパス (実際には multitive で処理される)
+assertEquals(
+    new Result<>(0, ""), Calculator.expression().parse("1+2-3")
+); // テストをパス
 ```
 
 DSLに向いたScalaに比べれば冗長になったものの、手書きで再帰下降パーザを組み立てるのに比べると大幅に簡潔な記述を実現することができました。しかも、JComb全体を通しても500行にすら満たないのは特筆すべきところです。Javaがユーザ定義の中置演算子をサポートしていればもっと簡潔にできたのですが、そこは向き不向きといったところでしょうか。
