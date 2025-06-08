@@ -3,7 +3,7 @@
 
 ここまでで、LL法やLR法、Packrat Parsingといった、これまでに知られているメジャーな構文解析アルゴリズムを一通り取り上げてきました。これらの構文解析アルゴリズムは概ね文脈自由言語あるいはそのサブセットを取り扱うことができ、一般的なプログラミング言語の構文解析を行うのに必要十分な能力を持っているように思えます。
 
-しかし、構文解析を専門としている人や実用的な構文解析器を書いている人は直感的に理解していることなのですが、実のところ、既存の構文解析アルゴリズムだけではうまく取り扱えない類の構文があります。一言でいうと、それらの構文は文脈自由言語から逸脱しているために、文脈自由言語を取り扱う既存の手法だけではうまくいかないのです。
+しかし、構文解析を専門としている人や実用的な構文解析器を書いている人は直感的に理解していることなのですが、実のところ、既存の構文解析アルゴリズムだけではうまく取り扱えない類の構文があります。一言でいうと、それらの構文は文脈自由言語（第4章で学んだCFG）から逸脱しているために、文脈自由言語を取り扱う既存の手法だけではうまくいかないのです。
 
 このような、既存の構文解析アルゴリズムだけでは扱えない要素は多数あります。たとえば、Cのtypedefはその典型ですし、RubyやPerlのヒアドキュメントと呼ばれる構文もそうです。他には、Scalaのプレースホルダ構文やC++のテンプレート、Pythonのインデント文法など、文脈自由言語を逸脱しているがゆえに人間が特別に配慮しなければいけない構文は多く見かけられます。
 
@@ -64,14 +64,62 @@ expression <- 式の定義
 
 PEGの利用例が近年増えてきているのは、言語に対してこのようにアドホックに構文を追加したいというニーズがあるためではないかと筆者は考えています。
 
-<!-- 図7.X: 文字列補間の解析状態遷移図のプレースホルダ -->
-<!-- 例: "abc#{1+2}def" の解析時
-1. 通常文字列モード: "abc" を消費
-2. 式モードへ遷移: '#{' を認識
-3. 式モード: 1+2 を式として解析
-4. 通常文字列モードへ復帰: '}' を認識
-5. 通常文字列モード: "def" を消費
--->
+```{=latex}
+\begin{center}
+\begin{tikzpicture}[
+  node distance=3cm,
+  every node/.style={font=\small},
+  % 状態ノードのスタイル
+  state/.style={
+    circle,
+    draw,
+    minimum size=1.8cm,
+    font=\footnotesize
+  },
+  % 初期状態のスタイル
+  initial state/.style={
+    state,
+    fill=green!10
+  },
+  % 遷移ラベルのスタイル
+  transition/.style={
+    font=\footnotesize\ttfamily,
+    auto
+  }
+]
+  
+  % 状態ノード
+  \node[initial state] (string) {文字列\textbackslash モード};
+  \node[state, right=of string, fill=orange!10] (expr) {式\textbackslash モード};
+  
+  % 初期状態への矢印
+  \draw[->, thick] ([xshift=-1cm]string.west) -- (string);
+  
+  % 状態遷移
+  \draw[->, thick, bend left=25] (string) to node[transition, above] {\#\{} (expr);
+  \draw[->, thick, bend left=25] (expr) to node[transition, below] {\}} (string);
+  
+  % 自己ループ
+  \draw[->, thick] (string) to[loop above] node[transition] {通常文字} (string);
+  \draw[->, thick] (expr) to[loop above] node[transition] {式トークン} (expr);
+  
+  % 例の説明
+  \node[below=2.5cm of string, text width=10cm, align=center] {
+    \footnotesize 例: \texttt{"abc\#\{1+2\}def"} の解析\\[0.2em]
+    \begin{tabular}{cl}
+      1. & 文字列モード: \texttt{"abc"} を消費 \\
+      2. & \texttt{\#\{} を認識 → 式モードへ遷移 \\
+      3. & 式モード: \texttt{1+2} を式として解析 \\
+      4. & \texttt{\}} を認識 → 文字列モードへ復帰 \\
+      5. & 文字列モード: \texttt{def"} を消費
+    \end{tabular}
+  };
+  
+  % 図のラベル
+  \node[below=5cm of string, font=\footnotesize] {図7.1: 文字列補間の解析状態遷移};
+\end{tikzpicture}
+\end{center}
+```
 
 ## インデント文法
 
@@ -88,44 +136,63 @@ class Point:
 
 ```{=latex}
 \begin{center}
-\begin{tikzpicture}[node distance=2cm]
-  % ノードスタイルの定義
-  \tikzstyle{classnode} = [rectangle, draw, rounded corners, fill=blue!20, minimum width=2cm, minimum height=0.8cm]
-  \tikzstyle{defnode} = [rectangle, draw, rounded corners, fill=orange!20, minimum width=2cm, minimum height=0.8cm]
-  \tikzstyle{namenode} = [rectangle, draw, rounded corners, fill=green!20, minimum width=3cm, minimum height=0.8cm]
-  \tikzstyle{argsnode} = [rectangle, draw, rounded corners, fill=purple!20, minimum width=2.5cm, minimum height=0.8cm]
-  \tikzstyle{bodynode} = [rectangle, draw, rounded corners, fill=red!20, minimum width=2cm, minimum height=0.8cm]
-  \tikzstyle{paramnode} = [rectangle, draw, rounded corners, fill=purple!10, minimum width=1.5cm, minimum height=0.6cm]
-  \tikzstyle{stmtnode} = [rectangle, draw, rounded corners, fill=red!10, minimum width=2.5cm, minimum height=0.6cm]
+\begin{tikzpicture}[
+  node distance=1.2cm and 1.5cm,
+  every node/.style={font=\small},
+  % ノードスタイル定義
+  astnode/.style={
+    rectangle, 
+    draw, 
+    rounded corners=3pt, 
+    minimum width=2.2cm, 
+    minimum height=0.7cm,
+    font=\ttfamily
+  },
+  classnode/.style={astnode, fill=blue!15},
+  defnode/.style={astnode, fill=orange!15},
+  namenode/.style={astnode, fill=green!15, minimum width=3cm},
+  argsnode/.style={astnode, fill=purple!15},
+  bodynode/.style={astnode, fill=red!15},
+  paramnode/.style={astnode, fill=gray!10, minimum width=1.2cm, minimum height=0.5cm},
+  stmtnode/.style={astnode, fill=yellow!10, minimum width=2.8cm, minimum height=0.5cm},
+  edge/.style={->, >=stealth, thick}
+]
   
-  % ノードの配置
-  \node[classnode] (class) at (0,0) {\texttt{class}};
-  \node[namenode] (classname) at (3,-1.5) {\texttt{name: Point}};
-  \node[defnode] (def) at (-3,-1.5) {\texttt{def}};
-  \node[namenode] (funcname) at (-3,-3) {\texttt{name: \_\_init\_\_}};
-  \node[argsnode] (args) at (-6,-3) {\texttt{arguments}};
-  \node[bodynode] (body) at (0,-3) {\texttt{body}};
+  % ルートノード
+  \node[classnode] (class) {class};
   
-  % パラメータノード
-  \node[paramnode] (self) at (-7,-4.5) {\texttt{self}};
-  \node[paramnode] (x) at (-6,-4.5) {\texttt{x}};
-  \node[paramnode] (y) at (-5,-4.5) {\texttt{y}};
+  % 第2レベル
+  \node[namenode, below left=of class] (classname) {name: Point};
+  \node[defnode, below right=of class] (def) {def};
   
-  % ステートメントノード
-  \node[stmtnode] (stmt1) at (-0.5,-4.5) {\texttt{self.x = x}};
-  \node[stmtnode] (stmt2) at (1.5,-4.5) {\texttt{self.y = y}};
+  % 第3レベル（def の子ノード）
+  \node[namenode, below=of def] (funcname) {name: \_\_init\_\_};
+  \node[argsnode, left=of funcname] (args) {arguments};
+  \node[bodynode, right=of funcname] (body) {body};
+  
+  % 第4レベル（パラメータ）
+  \node[paramnode, below=0.8cm of args, xshift=-1.2cm] (self) {self};
+  \node[paramnode, below=0.8cm of args] (x) {x};
+  \node[paramnode, below=0.8cm of args, xshift=1.2cm] (y) {y};
+  
+  % 第4レベル（ステートメント）
+  \node[stmtnode, below=0.8cm of body, xshift=-1.5cm] (stmt1) {self.x = x};
+  \node[stmtnode, below=0.8cm of body, xshift=1.5cm] (stmt2) {self.y = y};
   
   % エッジの描画
-  \draw[->, thick] (class) -- (classname);
-  \draw[->, thick] (class) -- (def);
-  \draw[->, thick] (def) -- (funcname);
-  \draw[->, thick] (def) -- (args);
-  \draw[->, thick] (def) -- (body);
-  \draw[->, thick] (args) -- (self);
-  \draw[->, thick] (args) -- (x);
-  \draw[->, thick] (args) -- (y);
-  \draw[->, thick] (body) -- (stmt1);
-  \draw[->, thick] (body) -- (stmt2);
+  \draw[edge] (class) -- (classname);
+  \draw[edge] (class) -- (def);
+  \draw[edge] (def) -- (funcname);
+  \draw[edge] (def) -- (args);
+  \draw[edge] (def) -- (body);
+  \draw[edge] (args) -- (self);
+  \draw[edge] (args) -- (x);
+  \draw[edge] (args) -- (y);
+  \draw[edge] (body) -- (stmt1);
+  \draw[edge] (body) -- (stmt2);
+  
+  % 図のラベル（必要に応じて）
+  \node[below=3cm of class, font=\footnotesize] {図7: Pythonクラス定義の抽象構文木};
 \end{tikzpicture}
 \end{center}
 ```
@@ -152,17 +219,86 @@ Pythonでは字句解析のときにインデントを`<INDENT>`（インデン�
 
 しかし、よくよく考えればわかるのですが、`<IDENT>`トークンと`<DEDENT>`トークンを切り出す処理が文脈自由ではありません。つまり、字句解析時に`<IDENT>`と`<DEDENT>`トークンを切り出すために特殊な処理をしていることになります。`<DEDENT>`トークンは`<IDENT>`トークンとスペースの数が同じでなければいけないため、切り出すためには正規表現でも文脈自由文法でも手に余ることは想像できるでしょう。
 
-<!-- 図7.Y: インデント文法のトークン化とブロック構造のプレースホルダ -->
-<!-- 例:
-class Point:
-  INDENT (レベル1)
-  def __init__(self, x, y):
-    INDENT (レベル2)
-    self.x = x
-    DEDENT (レベル1に戻る)
-  DEDENT (レベル0に戻る)
-インデントレベルのスタック: [0] -> [0, 2] -> [0, 2, 4] -> [0, 2] -> [0] のような変化
--->
+```{=latex}
+\begin{center}
+\begin{tikzpicture}[
+  node distance=0.3cm,
+  every node/.style={font=\footnotesize},
+  % コードラインのスタイル
+  codeline/.style={
+    rectangle,
+    anchor=west,
+    font=\ttfamily\footnotesize
+  },
+  % インデントトークンのスタイル
+  indenttoken/.style={
+    rectangle,
+    draw,
+    rounded corners=2pt,
+    fill=blue!10,
+    font=\footnotesize\ttfamily,
+    minimum height=0.5cm
+  },
+  % スタック表示のスタイル
+  stacknode/.style={
+    rectangle,
+    draw,
+    minimum width=0.8cm,
+    minimum height=0.5cm,
+    font=\footnotesize
+  }
+]
+  
+  % 左側: ソースコード表示
+  \node[codeline] (line1) at (0,0) {class Point:};
+  \node[codeline] (line2) at (0.5,-0.6) {def \_\_init\_\_(self, x, y):};
+  \node[codeline] (line3) at (1,-1.2) {self.x = x};
+  \node[codeline] (line4) at (1,-1.8) {self.y = y};
+  
+  % 中央: インデントトークン
+  \node[indenttoken, right=3cm of line1] (indent1) {INDENT};
+  \node[indenttoken, right=2.5cm of line2] (indent2) {INDENT};
+  \node[indenttoken, right=2.5cm of line4, yshift=-0.3cm] (dedent1) {DEDENT};
+  \node[indenttoken, below=0.1cm of dedent1] (dedent2) {DEDENT};
+  
+  % 矢印
+  \draw[->, gray] (line1.east) -- (indent1.west) node[midway, above, font=\tiny] {レベル0→2};
+  \draw[->, gray] (line2.east) -- (indent2.west) node[midway, above, font=\tiny] {レベル2→4};
+  \draw[->, gray] ([xshift=2cm]line4.east) -- (dedent1.west) node[midway, above, font=\tiny] {レベル4→2};
+  \draw[->, gray] ([xshift=2cm]dedent1.east) -- (dedent2.west) node[midway, above, font=\tiny] {レベル2→0};
+  
+  % 右側: インデントスタックの状態
+  \node[right=5.5cm of line1, anchor=west] (stack_label) {\textbf{インデントスタック}};
+  
+  % スタック状態1: [0]
+  \node[stacknode, below=0.3cm of stack_label] (s1_0) {0};
+  \node[right=0.2cm of s1_0] {← 初期状態};
+  
+  % スタック状態2: [0, 2]
+  \node[stacknode, below=0.7cm of s1_0] (s2_0) {0};
+  \node[stacknode, right=0 of s2_0] (s2_2) {2};
+  \node[right=0.2cm of s2_2] {← class定義後};
+  
+  % スタック状態3: [0, 2, 4]
+  \node[stacknode, below=0.7cm of s2_0] (s3_0) {0};
+  \node[stacknode, right=0 of s3_0] (s3_2) {2};
+  \node[stacknode, right=0 of s3_2] (s3_4) {4};
+  \node[right=0.2cm of s3_4] {← def定義後};
+  
+  % スタック状態4: [0, 2]
+  \node[stacknode, below=0.7cm of s3_0] (s4_0) {0};
+  \node[stacknode, right=0 of s4_0] (s4_2) {2};
+  \node[right=0.2cm of s4_2] {← defブロック終了};
+  
+  % スタック状態5: [0]
+  \node[stacknode, below=0.7cm of s4_0] (s5_0) {0};
+  \node[right=0.2cm of s5_0] {← classブロック終了};
+  
+  % 図のラベル
+  \node[below=1cm of s5_0, font=\footnotesize] {図7.2: インデント文法のトークン化とスタック管理};
+\end{tikzpicture}
+\end{center}
+```
 
 ## ヒアドキュメント
 
@@ -225,17 +361,108 @@ Rubyのヒアドキュメントが実際にどのように実装されている�
 
 PEGを拡張して規則が引数を持てるようにするという試みは複数ありますが、筆者もMacro PEGというPEGを拡張したものを提案しました。ヒアドキュメントという当たり前に使われている言語機能ですら、構文解析を正しく行うためには厄介な処理をする必要があるのです。
 
-<!-- 図7.Z: ヒアドキュメントのデリミタ対応の概念図プレースホルダ -->
-<!-- 例:
-<<E1
-  ...
-  <<E2
-    ...
-  E2
-  ...
-E1
-デリミタスタック: [] -> [E1] -> [E1, E2] -> [E1] -> []
--->
+```{=latex}
+\usetikzlibrary{decorations.pathreplacing}
+\begin{center}
+\begin{tikzpicture}[
+  node distance=0.4cm,
+  every node/.style={font=\footnotesize},
+  % ヒアドキュメントのスタイル
+  heredoc/.style={
+    rectangle,
+    anchor=west,
+    font=\ttfamily\footnotesize
+  },
+  % デリミタのスタイル
+  delimiter/.style={
+    rectangle,
+    draw,
+    rounded corners=2pt,
+    fill=yellow!20,
+    font=\ttfamily\footnotesize,
+    minimum height=0.5cm,
+    minimum width=1cm
+  },
+  % スタック要素のスタイル
+  stackitem/.style={
+    rectangle,
+    draw,
+    fill=orange!10,
+    minimum width=1cm,
+    minimum height=0.5cm,
+    font=\footnotesize\ttfamily
+  },
+  % ブレースのスタイル
+  brace/.style={
+    decorate,
+    decoration={brace, amplitude=5pt},
+    thick
+  }
+]
+  
+  % 左側: ヒアドキュメントの構造
+  \node[heredoc] (line1) at (0,0) {<<E1};
+  \node[heredoc] (line2) at (0.3,-0.5) {...};
+  \node[heredoc] (line3) at (0.3,-1) {<<E2};
+  \node[heredoc] (line4) at (0.6,-1.5) {...};
+  \node[heredoc] (line5) at (0.3,-2) {E2};
+  \node[heredoc] (line6) at (0.3,-2.5) {...};
+  \node[heredoc] (line7) at (0,-3) {E1};
+  
+  % デリミタのハイライト
+  \node[delimiter, right=2cm of line1] (delim1_start) {E1開始};
+  \node[delimiter, right=2cm of line3] (delim2_start) {E2開始};
+  \node[delimiter, right=2cm of line5] (delim2_end) {E2終了};
+  \node[delimiter, right=2cm of line7] (delim1_end) {E1終了};
+  
+  % 矢印
+  \draw[->, gray] (line1.east) -- (delim1_start.west);
+  \draw[->, gray] (line3.east) -- (delim2_start.west);
+  \draw[->, gray] (line5.east) -- (delim2_end.west);
+  \draw[->, gray] (line7.east) -- (delim1_end.west);
+  
+  % ブレースで範囲を示す
+  \draw[brace] ([xshift=-3mm]line1.west) -- ([xshift=-3mm]line7.west) 
+    node[midway, left=5mm, text width=1cm, align=center] {E1の\\範囲};
+  \draw[brace] ([xshift=-1mm]line3.west) -- ([xshift=-1mm]line5.west) 
+    node[midway, left=3mm, text width=1cm, align=center] {E2の\\範囲};
+  
+  % 右側: デリミタスタックの状態変化
+  \node[right=5cm of line1, anchor=west] (stack_title) {\textbf{デリミタスタック}};
+  
+  % 状態1: []
+  \node[below=0.3cm of stack_title, anchor=west] (state1) {[ ]};
+  \node[right=0.5cm of state1] {← 初期状態};
+  
+  % 状態2: [E1]
+  \node[below=0.5cm of state1, anchor=west] (state2_bracket) {[};
+  \node[stackitem, right=0 of state2_bracket, anchor=west] (state2_e1) {E1};
+  \node[right=0 of state2_e1, anchor=west] (state2_close) {]};
+  \node[right=0.5cm of state2_close] {← <<E1 認識};
+  
+  % 状態3: [E1, E2]
+  \node[below=0.5cm of state2_bracket, anchor=west] (state3_bracket) {[};
+  \node[stackitem, right=0 of state3_bracket, anchor=west] (state3_e1) {E1};
+  \node[right=0.1cm of state3_e1, anchor=west] (state3_comma) {,};
+  \node[stackitem, right=0.1cm of state3_comma, anchor=west] (state3_e2) {E2};
+  \node[right=0 of state3_e2, anchor=west] (state3_close) {]};
+  \node[right=0.5cm of state3_close] {← <<E2 認識};
+  
+  % 状態4: [E1]
+  \node[below=0.5cm of state3_bracket, anchor=west] (state4_bracket) {[};
+  \node[stackitem, right=0 of state4_bracket, anchor=west] (state4_e1) {E1};
+  \node[right=0 of state4_e1, anchor=west] (state4_close) {]};
+  \node[right=0.5cm of state4_close] {← E2 終了};
+  
+  % 状態5: []
+  \node[below=0.5cm of state4_bracket, anchor=west] (state5) {[ ]};
+  \node[right=0.5cm of state5] {← E1 終了};
+  
+  % 図のラベル
+  \node[below=1cm of state5, font=\footnotesize] {図7.3: ヒアドキュメントのデリミタ対応とスタック管理};
+\end{tikzpicture}
+\end{center}
+```
 
 以下に、これまで見てきたような文脈自由言語の範囲を超える構文上の課題と、それに対する一般的な解決策をまとめます。
 
@@ -455,7 +682,9 @@ println(x) // 1
 
 ## プレースホルダー構文
 
-Scalaにはプレースホルダー構文、正確にはPlaceholder Syntax for Anonymous Functionと呼ばれる構文があります。これは最近の言語ではすっかり普通に使えるようになったいわゆる**ラムダ式**を簡易表記するための構文です。
+Scalaにはプレースホルダー構文、正確にはPlaceholder Syntax for Anonymous Functionと呼ばれる構文があります。これは最近の言語ではすっかり普通に使えるようになったいわゆる**ラムダ式**（無名関数）を簡易表記するための構文です。
+
+ラムダ式は、Javaでも8以降で使えるようになった「名前のない関数」のことです。JavaだとComparatorを定義する時などに `(a, b) -> a.compareTo(b)` のように書きますね。
 
 たとえば、Scalaで`[1, 2, 3, 4]`というリストの各要素をインクリメントする処理はラムダ式（Scalaでは無名関数とも呼ばれます）を使って次のように書くことができます。
 
@@ -463,7 +692,7 @@ Scalaにはプレースホルダー構文、正確にはPlaceholder Syntax for A
 List(1, 2, 3, 4).map(x => x + 1)
 ```
 
-ラムダ式を普段から使っておられる読者には大体雰囲気で伝わると思うのですが、`map`は多くの言語で採用されている高階関数です。`map`は引数で渡された無名関数をリストの各要素に適用して、その結果できた新しいリストを返します。たとえば、上のプログラムだと実行結果は次のようになります。
+`map`は多くの言語で採用されている高階関数（関数を引数に取る関数）です。JavaのStream APIでも同様の機能があり、`.stream().map(...)`のように使いますね。`map`は引数で渡された無名関数をリストの各要素に適用して、その結果できた新しいリストを返します。たとえば、上のプログラムだと実行結果は次のようになります。
 
 
 ```scala
@@ -496,10 +725,9 @@ List(1, 2, 3, 4).foldLeft(0)(_ + _)
 List(1, 2, 3, 4).foldLeft(0)((x, y) => x + y)
 ```
 
-このケースでは、`(_ + _)`が`((x, y) => x + y)`という無名関数に変換されたわけですが、プレースホルダが複数出現するとややこしい問題になります。
+このケースでは、`(_ + _)`が`((x, y) => x + y)`という無名関数に変換されたわけですが、プレースホルダが複数出現するとややこしい問題になります。ここで重要なのは、`_`が出現する順番に対応して、引数の順番が決まるということです。最初の`_`が第1引数、2番目の`_`が第2引数に対応します。
 
-
-また、そもそもプレースホルダが単一であっても解釈が難しい問題もあります。たとえば、次の式は考えてみます。
+また、そもそもプレースホルダが単一であっても解釈が難しい問題もあります。たとえば、次の式を考えてみます。
 
 ```scala
 List(1, 2, 3, 4).map(_ * 2 + 3)
@@ -537,6 +765,8 @@ Scala処理系内部でプレースホルダ構文がどのように実装され
 ## C++のテンプレート構文
 
 C++のテンプレートは型パラメータを使ったジェネリックプログラミングを可能にする強力な機能ですが、その構文は構文解析の観点から見ると興味深い問題を含んでいます。特に有名なのが「`>>`の曖昧性」です。
+
+Javaのジェネリクスでいうと `List<List<String>>` のような書き方に相当しますが、C++では歴史的な経緯から特別な問題がありました。
 
 C++03までは、次のようなネストしたテンプレートの宣言はコンパイルエラーになりました：
 
@@ -577,7 +807,7 @@ std::map<int, std::vector<std::vector<int>>> nested;  // C++11以降はOK
 
 ## 正規表現リテラルの曖昧性
 
-JavaScriptには正規表現リテラルという便利な記法があります：
+JavaScriptには正規表現リテラルという便利な記法があります。Javaでは `Pattern.compile("[a-z]+", Pattern.CASE_INSENSITIVE)` のように書くところを、JavaScriptでは以下のように簡潔に書けます：
 
 ```javascript
 const pattern = /[a-z]+/i;  // 大文字小文字を区別しない英字のパターン
@@ -625,7 +855,9 @@ JavaScriptの構文解析器は、前のトークンの種類を記憶し、そ�
 
 ## マクロ展開
 
-C/C++のプリプロセッサマクロは、構文解析の前に展開される強力な機能ですが、構文解析を複雑にする要因の一つです：
+C/C++のプリプロセッサマクロは、構文解析の前に展開される強力な機能ですが、構文解析を複雑にする要因の一つです。
+
+Javaには存在しない機能ですが、C/C++では `#define` を使ってテキストレベルの置換を定義できます：
 
 ```c
 #define BEGIN {
@@ -689,6 +921,8 @@ int x = MAX(y++, z++);  // y++とz++が複数回評価される可能性
 ## 文字列内のエスケープシーケンス
 
 プログラミング言語の文字列リテラルには、特殊文字を表現するためのエスケープシーケンスが存在します。これは一見単純な機能に見えますが、実は様々な複雑さを含んでいます。
+
+Javaでも `\n`（改行）、`\t`（タブ）、`\"`（ダブルクォート）、`\\`（バックスラッシュ）などのエスケープシーケンスを日常的に使っていますね。
 
 基本的なエスケープシーケンスは多くの言語で共通です：
 
@@ -763,7 +997,7 @@ const query = String.raw`SELECT * FROM users WHERE name = 'John\'s'`;
 
 ## エラーリカバリ
 
-構文解析の途中でエラーが起きることは（当然ながら）普通にあります。構文解析中のエラーリカバリについては多くの研究があるものの、コンパイラの教科書で構文解析アルゴリズでのエラーリカバリについて言及されることは稀です。推測ですが、構文解析において２つ目以降のエラーは大抵最初のエラーに誘発されて起こるということや、どうしても経験則に頼った記述になりがちなため、教科書で言及されることは少ないのでしょう。また、大抵の言語処理系で構文解析中のエラーリカバリについては大したことをしていなかったという歴史的事情もあるかもしれません。
+構文解析の途中でエラーが起きることは（当然ながら）普通にあります。構文解析中のエラーリカバリについては多くの研究があるものの、コンパイラの教科書で構文解析アルゴリズムでのエラーリカバリについて言及されることは稀です。推測ですが、構文解析において２つ目以降のエラーは大抵最初のエラーに誘発されて起こるということや、どうしても経験則に頼った記述になりがちなため、教科書で言及されることは少ないのでしょう。また、大抵の言語処理系で構文解析中のエラーリカバリについては大したことをしていなかったという歴史的事情もあるかもしれません。
 
 しかし、現在は別の観点から構文解析中のエラーリカバリが重要性を増してきています。それは、テキストエディタの拡張としてIDEのような「構文解析エラーになるが、それっぽくなんとか構文解析をしなければいけない」というニーズがあるからです。ユーザーがコードを書いている最中は、一時的に文法的に正しくない状態になることが頻繁にあります。IDEがそのような状況でも構文ハイライト、コード補完、リアルタイムのエラー表示などの機能を提供し続けるためには、エラーが発生しても即座に解析を中断するのではなく、可能な限り解析を継続し、後続のエラーも検出できるような仕組み、すなわちエラーリカバリ機構が不可欠です。
 
@@ -775,7 +1009,9 @@ const query = String.raw`SELECT * FROM users WHERE name = 'John\'s'`;
 
 - **フレーズレベルリカバリ (Phrase-Level Recovery):** エラー箇所の周辺で、局所的な修正を試みる手法です。例えば、不足しているセミコロンを補ったり、予期しないトークンを削除したり、期待されるトークンに置き換えたりします。
 
-  `x = a + b y = c;` というコードで、`b` と `y` の間にセミコロンが欠落している場合、パーサは `y` が予期しないトークンであると判断します。フレーズレベルリカバリでは、「文の終わりにはセミコロンが期待される」という知識に基づき、`b` の後にセミコロンを挿入して `x = a + b; y = c;` として解析を試みるかもしれません。例えば、Javaのメソッド呼び出しで `myObject.method(arg1 arg2)` のようにカンマが抜けている場合、`arg1` と `arg2` の間にカンマを補って `myObject.method(arg1, arg2)` として解釈を試みる、といった具合です。あるいは、JSON の配列 `[1, , 2]` で余分なカンマがある場合、それを削除して `[1, 2]` として解析を続けるかもしれません。パニックモードよりは洗練されていますが、どのような修正を行うかの判断が難しく、実装が複雑になりがちです。
+  `x = a + b y = c;` というコードで、`b` と `y` の間にセミコロンが欠落している場合、パーサは `y` が予期しないトークンであると判断します。フレーズレベルリカバリでは、「文の終わりにはセミコロンが期待される」という知識に基づき、`b` の後にセミコロンを挿入して `x = a + b; y = c;` として解析を試みるかもしれません。
+  
+  Javaのメソッド呼び出しで `myObject.method(arg1 arg2)` のようにカンマが抜けている場合、`arg1` と `arg2` の間にカンマを補って `myObject.method(arg1, arg2)` として解釈を試みる、といった具合です。あるいは、JSONの配列 `[1, , 2]` で余分なカンマがある場合、それを削除して `[1, 2]` として解析を続けるかもしれません。パニックモードよりは洗練されていますが、どのような修正を行うかの判断が難しく、実装が複雑になりがちです。
 
 - **エラー生成規則 (Error Productions):** 文法にあらかじめよくあるエラーパターンに対応する生成規則を追加しておく手法です。例えば、「`if (condition) statement`」という正しい規則に加えて、「`if condition) statement`」（開き括弧が欠落）のようなエラー用の規則を定義しておきます。これにより、特定のエラーを「受理」し、解析を継続できます。
 
@@ -794,7 +1030,11 @@ statement: IF '(' expr ')' statement
 
   `if x > 0) { ... }` という入力に対し、グローバルコレクションは開き括弧 `(` を挿入するのが最小の修正であると判断するかもしれません。しかし、入力全体を考慮して最適な修正を見つけるのは計算量的に非常に困難であり、実用的なコンパイラやIDEでこの手法が全面的に採用されることは稀です。
 
-IDEのような環境では、これらの手法を組み合わせたり、部分的な構文木（エラー箇所を含むかもしれないが、解析できた部分）を構築したり、インクリメンタルな解析（変更箇所だけを再解析する）を行ったりすることで、ユーザーが編集中でも可能な限り正確な情報を提供しようと試みています。例えば、ユーザーが `class MyClass { public void myMethod() { ... }` と入力し、最後の閉じ括弧 `}` を入力し忘れている場合でも、IDEは `myMethod` の本体部分についてはある程度解析を試み、メソッド内の変数に対するコード補完や型チェックを行おうとします。これは、エラーリカバリ機構が、エラー箇所を特定しつつも、それ以外の部分については解析を継続し、部分的な構文情報を抽出しているためです。エラーリカバリは、単にエラーを見つけるだけでなく、その後の解析をどう継続し、ユーザーにどのようなフィードバックを与えるかという、より実践的で奥深い問題領域なのです。
+IDEのような環境では、これらの手法を組み合わせたり、部分的な構文木（エラー箇所を含むかもしれないが、解析できた部分）を構築したり、インクリメンタルな解析（変更箇所だけを再解析する）を行ったりすることで、ユーザーが編集中でも可能な限り正確な情報を提供しようと試みています。
+
+例えば、Javaのクラスを書いている途中で `class MyClass { public void myMethod() { ... }` と入力し、最後の閉じ括弧 `}` を入力し忘れている場合でも、IDEは `myMethod` の本体部分についてはある程度解析を試み、メソッド内の変数に対するコード補完や型チェックを行おうとします。これは、エラーリカバリ機構が、エラー箇所を特定しつつも、それ以外の部分については解析を継続し、部分的な構文情報を抽出しているためです。
+
+エラーリカバリは、単にエラーを見つけるだけでなく、その後の解析をどう継続し、ユーザーにどのようなフィードバックを与えるかという、より実践的で奥深い問題領域なのです。
 
 ## まとめ
 
