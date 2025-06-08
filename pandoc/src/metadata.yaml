@@ -50,6 +50,8 @@ header-includes: |
   \usepackage{makecell}
   \usepackage{xcolor}
   \usepackage{listings}
+  \usepackage{tikz}
+  \usetikzlibrary{shapes,arrows,positioning,calc,automata,chains,fit,decorations.pathmorphing}
   \pagestyle{fancy}
   \fancyhf{}
   \fancyhead[C]{\thepage}

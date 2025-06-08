@@ -489,7 +489,25 @@ term = NUMBER | '(' expression ')';
 
 たとえば、`1 + 2 * 3`という算術式の抽象構文木は以下のようになります。
 
-![](img/chapter2/ast1.svg){ width=50% }
+```{=latex}
+\begin{center}
+\begin{tikzpicture}[
+  level distance=1.5cm,
+  sibling distance=2cm,
+  every node/.style={circle,draw,minimum size=0.8cm},
+  root/.style={fill=gray!50},
+  internal/.style={fill=brown!50},
+  leaf/.style={fill=green!30}
+]
+  \node[root] {+}
+    child { node[leaf] {1} }
+    child { node[internal] {*}
+      child { node[leaf] {2} }
+      child { node[leaf] {3} }
+    };
+\end{tikzpicture}
+\end{center}
+```
 
 抽象構文木の各ノードは、プログラムの構造を表現するためのデータ構造です。たとえば、`+`ノードは足し算を表し、`1`ノードは整数の`1`を表します。
 
@@ -517,7 +535,25 @@ term = NUMBER | '(' expression ')';
 
 改めて、先程の抽象構文木を見てみましょう。
 
-![](img/chapter2/ast1.svg){ width=50% }
+```{=latex}
+\begin{center}
+\begin{tikzpicture}[
+  level distance=1.5cm,
+  sibling distance=2cm,
+  every node/.style={circle,draw,minimum size=0.8cm},
+  root/.style={fill=gray!50},
+  internal/.style={fill=brown!50},
+  leaf/.style={fill=green!30}
+]
+  \node[root] {+}
+    child { node[leaf] {1} }
+    child { node[internal] {*}
+      child { node[leaf] {2} }
+      child { node[leaf] {3} }
+    };
+\end{tikzpicture}
+\end{center}
+```
 
 この木構造では、`+`がルートノードであり、その左の子が`1`、右の子が`*`です。`*`ノードの子として`2`と`3`が配置されています。これにより、演算の優先順位が明確に表現されるわけです。
 

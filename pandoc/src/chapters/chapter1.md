@@ -97,7 +97,25 @@ x = 1 +
 ```
 このコードは、JavaScriptエンジンによって `x = 1 + 2;` と解釈され、直観的には以下のような抽象構文木が結果として返ってくるのが正しいように思われます（抽象構文木の説明は、いったんおいておきます）。
 
-![](img/chapter1/ast1.svg){ width=50% }
+```{=latex}
+\begin{center}
+\begin{tikzpicture}[
+  level distance=1.5cm,
+  sibling distance=2cm,
+  every node/.style={circle,draw,minimum size=0.8cm},
+  root/.style={fill=gray!50},
+  internal/.style={fill=brown!50},
+  leaf/.style={fill=green!30}
+]
+  \node[root] {=}
+    child { node[leaf] {x} }
+    child { node[internal] {+}
+      child { node[leaf] {1} }
+      child { node[leaf] {2} }
+    };
+\end{tikzpicture}
+\end{center}
+```
 
 
 では、次のJavaScriptプログラムはどうでしょうか？
@@ -111,7 +129,28 @@ x = 1
 
 しかし、実際にはJavaScriptの自動セミコロン挿入（ASI: Automatic Semicolon Insertion）というルールにより、`x = 1; +2;` と解釈され、結果として以下のような2つの文として扱われます。
 
-![](img/chapter1/ast2.svg){ width=50% }
+```{=latex}
+\begin{center}
+\begin{tikzpicture}[
+  level distance=1.5cm,
+  sibling distance=3cm,
+  every node/.style={circle,draw,minimum size=0.8cm},
+  root/.style={fill=gray!50},
+  internal/.style={fill=brown!50},
+  leaf/.style={fill=green!30}
+]
+  \node[root] {;}
+    child { node[internal] {=}
+      child { node[leaf] {x} }
+      child { node[leaf] {1} }
+    }
+    child { node[internal] {+}
+      child[missing] {}
+      child { node[leaf] {2} }
+    };
+\end{tikzpicture}
+\end{center}
+```
 
 `+`の後で改行するか、あるいは`+`の前に改行するかという一見**ささいな違い**によって、構文解析の結果が変わってしまうのです。JavaScriptのASIは、特定のルールに基づいて行末にセミコロンが自動的に挿入される機能ですが、そのルールは時として直感に反する結果を生むことがあります。例えば、`return`文の直後で改行すると、
 

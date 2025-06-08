@@ -177,7 +177,11 @@ $endif$
   bottom=5mm
 }
 % Redefine Shaded environment for code blocks
-\renewenvironment{Shaded}{\begin{myquote}}{\end{myquote}}
+\ifcsname Shaded\endcsname
+  \renewenvironment{Shaded}{\begin{myquote}}{\end{myquote}}
+\else
+  \newenvironment{Shaded}{\begin{myquote}}{\end{myquote}}
+\fi
 $if(tables)$
 \usepackage{longtable,booktabs,array}
 $if(multirow)$

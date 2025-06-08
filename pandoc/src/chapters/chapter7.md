@@ -87,7 +87,49 @@ class Point:
 
 このPythonプログラムは次のような抽象構文木に変換されると考えられます。
 
-![](img/chapter7/py-ast.svg){ width=70% }
+```{=latex}
+\begin{center}
+\begin{tikzpicture}[node distance=2cm]
+  % ノードスタイルの定義
+  \tikzstyle{classnode} = [rectangle, draw, rounded corners, fill=blue!20, minimum width=2cm, minimum height=0.8cm]
+  \tikzstyle{defnode} = [rectangle, draw, rounded corners, fill=orange!20, minimum width=2cm, minimum height=0.8cm]
+  \tikzstyle{namenode} = [rectangle, draw, rounded corners, fill=green!20, minimum width=3cm, minimum height=0.8cm]
+  \tikzstyle{argsnode} = [rectangle, draw, rounded corners, fill=purple!20, minimum width=2.5cm, minimum height=0.8cm]
+  \tikzstyle{bodynode} = [rectangle, draw, rounded corners, fill=red!20, minimum width=2cm, minimum height=0.8cm]
+  \tikzstyle{paramnode} = [rectangle, draw, rounded corners, fill=purple!10, minimum width=1.5cm, minimum height=0.6cm]
+  \tikzstyle{stmtnode} = [rectangle, draw, rounded corners, fill=red!10, minimum width=2.5cm, minimum height=0.6cm]
+  
+  % ノードの配置
+  \node[classnode] (class) at (0,0) {\texttt{class}};
+  \node[namenode] (classname) at (3,-1.5) {\texttt{name: Point}};
+  \node[defnode] (def) at (-3,-1.5) {\texttt{def}};
+  \node[namenode] (funcname) at (-3,-3) {\texttt{name: \_\_init\_\_}};
+  \node[argsnode] (args) at (-6,-3) {\texttt{arguments}};
+  \node[bodynode] (body) at (0,-3) {\texttt{body}};
+  
+  % パラメータノード
+  \node[paramnode] (self) at (-7,-4.5) {\texttt{self}};
+  \node[paramnode] (x) at (-6,-4.5) {\texttt{x}};
+  \node[paramnode] (y) at (-5,-4.5) {\texttt{y}};
+  
+  % ステートメントノード
+  \node[stmtnode] (stmt1) at (-0.5,-4.5) {\texttt{self.x = x}};
+  \node[stmtnode] (stmt2) at (1.5,-4.5) {\texttt{self.y = y}};
+  
+  % エッジの描画
+  \draw[->, thick] (class) -- (classname);
+  \draw[->, thick] (class) -- (def);
+  \draw[->, thick] (def) -- (funcname);
+  \draw[->, thick] (def) -- (args);
+  \draw[->, thick] (def) -- (body);
+  \draw[->, thick] (args) -- (self);
+  \draw[->, thick] (args) -- (x);
+  \draw[->, thick] (args) -- (y);
+  \draw[->, thick] (body) -- (stmt1);
+  \draw[->, thick] (body) -- (stmt2);
+\end{tikzpicture}
+\end{center}
+```
 
 インデントによってプログラムの構造を表現するというアイデアは秀逸ですが、一方で、インデントによる構造の表現は明らかに文脈自由言語の範囲を超えるものです。
 
