@@ -206,47 +206,53 @@ public class PEG2Java {
 構文解析器生成系は1970年代頃から研究の蓄積があり、数多くの構文解析器生成系がこれまで開発されています。
 
 基本的には、構文解析器生成系は採用している構文解析アルゴリズムによって分類されます。たとえば：
+
 - JavaCCはLL(1)構文解析器を出力するため、**LL(1)構文解析器生成系**
 - yacc/bisonはLALR(1)構文解析器を出力するため、**LALR(1)構文解析器生成系**
 
 一般的な構文解析器生成系の処理フローは、おおむね以下のようになります。
 
-```mermaid
-graph LR
-    A[文法定義ファイル (.g, .y, .jjなど)] --> B{構文解析器生成系};
-    B -- 字句解析ルール --> C[字句解析器コード生成部];
-    C --> D[生成された字句解析器コード (.java, .cなど)];
-    B -- 構文解析ルール --> E[構文解析器コード生成部];
-    E --> F[生成された構文解析器コード (.java, .cなど)];
-    G[ユーザー定義コード/アクション] --> H{コンパイラ};
-    D --> H;
-    F --> H;
-    H --> I[実行可能なパーサー];
+```{=latex}
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    scale=0.8, transform shape,
+    node distance=2.2cm,
+    box/.style={draw, rectangle, minimum width=3cm, minimum height=0.8cm, align=center, font=\small},
+    diamond/.style={draw, ellipse, minimum width=2.8cm, minimum height=1cm, align=center, font=\small},
+    arrow/.style={->, thick},
+    label/.style={midway, above, font=\footnotesize}
+]
+    % ノードの定義
+    \node[box] (A) {文法定義ファイル\\(.g, .y, .jjなど)};
+    \node[diamond, right=1.8cm of A] (B) {構文解析器\\生成系};
+    \node[box, above right=1cm and 1.5cm of B] (C) {字句解析器\\コード生成部};
+    \node[box, right=1.8cm of C] (D) {生成された\\字句解析器コード\\(.java, .cなど)};
+    \node[box, below right=1cm and 1.5cm of B] (E) {構文解析器\\コード生成部};
+    \node[box, right=1.8cm of E] (F) {生成された\\構文解析器コード\\(.java, .cなど)};
+    \node[diamond, right=3.5cm of B] (H) {コンパイラ};
+    \node[box, right=1.8cm of H] (I) {実行可能な\\パーサー};
+    
+    % 矢印の定義
+    \draw[arrow] (A) -- (B);
+    \draw[arrow] (B) -- node[label,sloped] {字句解析ルール} (C);
+    \draw[arrow] (C) -- (D);
+    \draw[arrow] (B) -- node[label,sloped] {構文解析ルール} (E);
+    \draw[arrow] (E) -- (F);
+    \draw[arrow] (D) -- (H);
+    \draw[arrow] (F) -- (H);
+    \draw[arrow] (H) -- (I);
+\end{tikzpicture}
+\caption{一般的な構文解析器生成系の処理フロー}
+\label{fig:parser-generator-flow}
+\end{figure}
 ```
-*図6.X 一般的な構文解析器生成系の処理フロー*
 
 Yacc/Lexのように、字句解析器生成系（Lex）と構文解析器生成系（Yacc）が別々のツールとして提供され、連携して動作するケースもあります。
 
-```mermaid
-graph LR
-    A[Lex定義ファイル (.l)] --> B[Lex];
-    B --> C[字句解析器 Cコード (lex.yy.c)];
-    D[Yacc定義ファイル (.y)] --> E[Yacc];
-    E --> F[構文解析器 Cコード (y.tab.c)];
-    E --> G[ヘッダファイル (y.tab.h)];
-    C --> H[Cコンパイラ];
-    F --> H;
-    G -- #include --> C;
-    G -- #include --> F;
-    I[ユーザーコード (main関数など)] --> H;
-    H --> J[実行ファイル];
-```
+ただし、例外もあります。GNU Bisonはyaccと違って、LALR(1)より広いGLR（Generalized LR：一般化LR）構文解析器も生成できるので、GLR構文解析器生成系であるとも言えるのです。
 
-*図6.Y Yacc/Lexの連携フロー*
-
-ただし、例外もあります。GNU bisonはyaccと違って、LALR(1)より広いGLR（Generalized LR：一般化LR）構文解析器も生成できるので、GLR構文解析器生成系であるとも言えるのです。
-
-GLRは、通常のLR構文解析ではコンフリクト（シフト/還元コンフリクトなど）が発生するような曖昧な文法も扱えるように拡張された手法です。実際には、yacc/bisonを使う場合、ほとんどはLALR(1)構文解析器を出力するので、GLRについては言及されることは少ないですが、そのようなことは知っておいても損はないでしょう。
+GLRは、通常のLR構文解析ではコンフリクト（シフト/還元コンフリクトなど）が発生するような曖昧な文法も扱えるように拡張された手法です。実際には、yacc/bisonを使う場合、ほとんどはLALR(1)構文解析器を出力するので、GLRについて言及されることは少ないですが、そのようなことは知っておいても損はないでしょう。
 
 より大きなくくりでみると、下向き構文解析（LL法やPEG）と上向き構文解析（LR法など）という観点から分類することもできますし、ともに文脈自由文法ベースであるLL法やLR法と、解析表現文法など他の形式言語を用いた構文解析法を対比してみせることもできます。
 
