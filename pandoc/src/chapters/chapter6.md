@@ -135,79 +135,6 @@ public class DyckParser {
 
 このようにして、比較的シンプルにPEGからDyck言語の構文解析器を生成することができました。
 
-### より洗練された実装
-
-実際の構文解析器生成系では、抽象構文木を返すような、洗練された実装を行います：
-
-```java
-public class DyckParserWithAST {
-    private String input;
-    private int position;
-    
-    // 抽象構文木のノード
-    static class Node {
-        String type;
-        List<Node> children = new ArrayList<>();
-        
-        Node(String type) {
-            this.type = type;
-        }
-    }
-    
-    public DyckParserWithAST(String input) {
-        this.input = input;
-        this.position = 0;
-    }
-    
-    // D <- P （ASTを返すバージョン）
-    public Node parseD() {
-        Node pNode = parseP();
-        if (pNode != null) {
-            Node dNode = new Node("D");
-            dNode.children.add(pNode);
-            return dNode;
-        }
-        return null;
-    }
-    
-    // P <- "(" P ")" P / ""
-    public Node parseP() {
-        int savedPos = position;
-        
-        // "(" P ")" P を試す
-        if (match("(")) {
-            Node p1 = parseP();
-            if (p1 != null && match(")")) {
-                Node p2 = parseP();
-                if (p2 != null) {
-                    Node node = new Node("P");
-                    node.children.add(new Node("("));
-                    node.children.add(p1);
-                    node.children.add(new Node(")"));
-                    node.children.add(p2);
-                    return node;
-                }
-            }
-        }
-        
-        // バックトラック
-        position = savedPos;
-        
-        // 空文字列の場合
-        return new Node("P_empty");
-    }
-    
-    private boolean match(String str) {
-        if (position + str.length() <= input.length() &&
-            input.startsWith(str, position)) {
-            position += str.length();
-            return true;
-        }
-        return false;
-    }
-}
-```
-
 ### 構文解析器生成系の実装
 
 実際の構文解析器生成系では、以下のようなステップで自動生成を行います：
@@ -216,9 +143,11 @@ public class DyckParserWithAST {
 2. **中間表現の生成**：文法規則を内部的なデータ構造に変換
 3. **コード生成**：テンプレートを使ってJavaコードを出力
 
+以下は中間表現が生成された後のコード生成の例です。ここでは、PEGの規則を表すクラス`Rule`と、各種PEG式を表す`Expression`クラスを定義し、Javaコードを生成しています。
+
 ```java
 // 簡単な構文解析器生成系の例
-public class SimplePEGGenerator {
+public class PEG2Java {
     // 文法規則を表すクラス
     static class Rule {
         String name;
