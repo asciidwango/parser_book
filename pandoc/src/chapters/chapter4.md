@@ -276,6 +276,67 @@ a*       繰り返し（0回以上のa）
 
 しかし、正規表現は本質的に「有限の状態」しか記憶できません。括弧が何重にネストしているかを覚えておくには、理論的に無限の状態が必要になるため、正規表現では表現できないのです。
 
+### 正規表現の構成要素を詳しく見る
+
+正規表現は、実は非常にシンプルな3つの基本演算から構成されています。現代の正規表現エンジンは多くの便利な記法を提供していますが、理論的にはすべて以下の基本演算に帰着できます。
+
+#### 1. 連接（Concatenation）
+
+2つの正規表現を続けて書くことを**連接**と呼びます。
+
+```
+正規表現: ab
+マッチする文字列: "ab"
+マッチしない文字列: "a", "b", "ba", "abc"
+```
+
+連接は最も基本的な演算で、「次に」という順序関係を表現します。
+
+#### 2. 選択（Union/Alternation）
+
+`|`記号を使って、複数の選択肢を表現します。
+
+```
+正規表現: a|b
+マッチする文字列: "a", "b"
+マッチしない文字列: "ab", "c", ""
+```
+
+より複雑な例：
+```
+正規表現: (ab|cd)
+マッチする文字列: "ab", "cd"
+マッチしない文字列: "ac", "bd", "abcd"
+```
+
+#### 3. 繰り返し（Kleene Star）
+
+`*`記号は、直前の要素を0回以上繰り返すことを意味します。この演算は数学者Stephen Cole Kleeneにちなんで「Kleeneスター」と呼ばれます。
+
+```
+正規表現: a*
+マッチする文字列: "", "a", "aa", "aaa", ...
+マッチしない文字列: "b", "ab"
+```
+
+#### 派生的な演算子
+
+現代の正規表現では、便利のために多くの派生的な演算子が追加されています：
+
+```
+a+       1回以上の繰り返し（aa*と同等）
+a?       0回または1回（a|εと同等）
+a{n}     ちょうどn回の繰り返し
+a{n,m}   n回以上m回以下の繰り返し
+[a-z]    文字クラス（a|b|c|...|zと同等）
+.        任意の1文字
+```
+
+しかし、これらはすべて基本の3演算で表現できます。たとえば：
+- `a+` は `aa*`
+- `a?` は `a|ε`（εは空文字列）
+- `[abc]` は `a|b|c`
+
 ### 正規表現の裏側にある仕組み
 
 皆さんは正規表現を使っているとき、その裏側でどのような処理が行われているか考えたことはありますか？
@@ -348,6 +409,175 @@ a*       繰り返し（0回以上のa）
 - 文字を読まずに移動することはできません
 - 実装が簡単で、実行速度が速いです
 
+### 正規表現からNFAへの変換
+
+正規表現がどのようにオートマトンに変換されるか、具体的に見ていきましょう。この変換は「Thompson構成法」と呼ばれ、Ken Thompsonによって開発されました。
+
+#### 基本的な変換規則
+
+**1. 単一文字の場合**
+
+正規表現 `a` は、以下のNFAになります：
+
+```{=latex}
+\begin{center}
+\begin{tikzpicture}[
+  >=stealth',
+  node distance=3cm,
+  state/.style={circle, draw, minimum size=8mm},
+  accept/.style={state, double}
+]
+  \node[state] (s0) {0};
+  \node[accept] (s1) [right of=s0] {1};
+  
+  \draw[->] (s0) -- node[above] {$a$} (s1);
+  \draw[->] ([xshift=-1cm]s0.west) -- (s0);
+\end{tikzpicture}
+\end{center}
+```
+
+**2. 連接の場合**
+
+正規表現 `AB`（AとBの連接）は、AのNFAとBのNFAを接続します：
+
+```{=latex}
+\begin{center}
+\begin{tikzpicture}[
+  >=stealth',
+  node distance=2cm,
+  state/.style={circle, draw, minimum size=8mm},
+  accept/.style={state, double},
+  nfa/.style={rectangle, draw, dashed, minimum width=2cm, minimum height=1.5cm}
+]
+  \node[nfa] (A) {A};
+  \node[nfa] (B) [right=3cm of A] {B};
+  
+  \draw[->] ([xshift=-1cm]A.west) -- (A);
+  \draw[->] (A) -- node[above] {$\varepsilon$} (B);
+  \draw[->] (B) -- ([xshift=1cm]B.east);
+\end{tikzpicture}
+\end{center}
+```
+
+AのNFAの受理状態とBのNFAの開始状態をε遷移で結びます。
+
+**3. 選択の場合**
+
+正規表現 `A|B` は、新しい開始状態から両方への分岐を作ります：
+
+```{=latex}
+\begin{center}
+\begin{tikzpicture}[
+  >=stealth',
+  node distance=2cm,
+  state/.style={circle, draw, minimum size=8mm},
+  accept/.style={state, double},
+  nfa/.style={rectangle, draw, dashed, minimum width=2cm, minimum height=1.5cm}
+]
+  \node[state] (start) {0};
+  \node[nfa] (A) [above right=1.5cm and 2cm of start] {A};
+  \node[nfa] (B) [below right=1.5cm and 2cm of start] {B};
+  \node[accept] (end) [right=5cm of start] {1};
+  
+  \draw[->] ([xshift=-1cm]start.west) -- (start);
+  \draw[->] (start) -- node[above] {$\varepsilon$} (A);
+  \draw[->] (start) -- node[below] {$\varepsilon$} (B);
+  \draw[->] (A) -- node[above] {$\varepsilon$} (end);
+  \draw[->] (B) -- node[below] {$\varepsilon$} (end);
+\end{tikzpicture}
+\end{center}
+```
+
+**4. 繰り返しの場合**
+
+正規表現 `A*` は、ループとスキップの両方を許可します：
+
+```{=latex}
+\begin{center}
+\begin{tikzpicture}[
+  >=stealth',
+  node distance=2cm,
+  state/.style={circle, draw, minimum size=8mm},
+  accept/.style={state, double},
+  nfa/.style={rectangle, draw, dashed, minimum width=2cm, minimum height=1.5cm}
+]
+  \node[state] (start) {0};
+  \node[nfa] (A) [right=2cm of start] {A};
+  \node[accept] (end) [right=2cm of A] {1};
+  
+  \draw[->] ([xshift=-1cm]start.west) -- (start);
+  \draw[->] (start) -- node[above] {$\varepsilon$} (A);
+  \draw[->] (A) -- node[above] {$\varepsilon$} (end);
+  \draw[->] (start) to[bend right=30] node[below] {$\varepsilon$} (end);
+  \draw[->] (A) to[bend right=30] node[below] {$\varepsilon$} (start);
+\end{tikzpicture}
+\end{center}
+```
+
+#### 具体例：`(a|b)*abb` の構築
+
+では、実際に `(a|b)*abb` という正規表現からNFAを構築してみましょう。
+
+**ステップ1：`a|b` の部分**
+
+まず、`a|b`のNFAを作ります：
+
+```{=latex}
+\begin{center}
+\begin{tikzpicture}[
+  >=stealth',
+  node distance=2cm,
+  state/.style={circle, draw, minimum size=7mm},
+  accept/.style={state, double}
+]
+  \node[state] (s0) {0};
+  \node[state] (s1) [above right of=s0] {1};
+  \node[state] (s2) [below right of=s0] {2};
+  \node[state] (s3) [right=3cm of s0] {3};
+  
+  \draw[->] (s0) -- node[above] {$\varepsilon$} (s1);
+  \draw[->] (s0) -- node[below] {$\varepsilon$} (s2);
+  \draw[->] (s1) -- node[above] {$a$} (s3);
+  \draw[->] (s2) -- node[below] {$b$} (s3);
+\end{tikzpicture}
+\end{center}
+```
+
+**ステップ2：`(a|b)*` の部分**
+
+次に、Kleeneスターを適用します：
+
+```{=latex}
+\begin{center}
+\begin{tikzpicture}[
+  >=stealth',
+  node distance=1.8cm,
+  state/.style={circle, draw, minimum size=6mm},
+  accept/.style={state, double}
+]
+  \node[state] (start) {S};
+  \node[state] (s0) [right of=start] {0};
+  \node[state] (s1) [above right of=s0] {1};
+  \node[state] (s2) [below right of=s0] {2};
+  \node[state] (s3) [right=2.5cm of s0] {3};
+  \node[state] (end) [right of=s3] {E};
+  
+  \draw[->] (start) -- node[above] {$\varepsilon$} (s0);
+  \draw[->] (s0) -- node[above] {$\varepsilon$} (s1);
+  \draw[->] (s0) -- node[below] {$\varepsilon$} (s2);
+  \draw[->] (s1) -- node[above] {$a$} (s3);
+  \draw[->] (s2) -- node[below] {$b$} (s3);
+  \draw[->] (s3) -- node[above] {$\varepsilon$} (end);
+  \draw[->] (s3) to[bend right=40] node[below] {$\varepsilon$} (s0);
+  \draw[->] (start) to[bend left=70] node[above] {$\varepsilon$} (end);
+\end{tikzpicture}
+\end{center}
+```
+
+**ステップ3：`abb` を追加**
+
+最後に、`abb`の部分を連接します。これが最終的なNFAです（前述の図と同じ）。
+
 #### 正規表現 (a|b)*abb のNFA
 
 ```{=latex}
@@ -391,9 +621,123 @@ a*       繰り返し（0回以上のa）
 
 このNFAは「aまたはbを任意回繰り返した後、abbで終わる」文字列を認識します。
 
-#### 同じ正規表現のDFA
+### NFAからDFAへの変換：部分集合構成法
 
-NFAをDFAに変換すると（部分集合構成法という手法を使います）：
+NFAは実装が複雑なので、多くの場合DFAに変換して使用します。この変換には**部分集合構成法**（Subset Construction）という手法を使います。
+
+#### 部分集合構成法の考え方
+
+NFAの問題点は「同時に複数の状態にいる可能性がある」ことです。部分集合構成法は、この「複数の状態の組み合わせ」を1つのDFA状態として扱います。
+
+たとえば、NFAで「状態0または状態6にいる」という状況を、DFAでは「状態{0,6}にいる」と表現します。
+
+#### 変換の手順
+
+1. **ε-閉包の計算**：ある状態からε遷移だけで到達できるすべての状態を求める
+2. **開始状態の決定**：NFAの開始状態のε-閉包がDFAの開始状態
+3. **遷移の計算**：各DFA状態から各文字での遷移先を計算
+4. **新しい状態の発見**：未処理の状態がなくなるまで繰り返す
+
+#### 具体例：簡単なNFAの変換
+
+まず、簡単な例で部分集合構成法を理解しましょう。正規表現 `a(b|c)*` のNFAを考えます：
+
+```{=latex}
+\begin{center}
+\begin{tikzpicture}[
+  >=stealth',
+  node distance=2cm,
+  state/.style={circle, draw, minimum size=8mm},
+  accept/.style={state, double}
+]
+  \node[state] (s0) {0};
+  \node[state] (s1) [right of=s0] {1};
+  \node[accept] (s2) [right of=s1] {2};
+  \node[state] (s3) [above right of=s2] {3};
+  \node[state] (s4) [below right of=s2] {4};
+  
+  \draw[->] ([xshift=-1cm]s0.west) -- (s0);
+  \draw[->] (s0) -- node[above] {$a$} (s1);
+  \draw[->] (s1) -- node[above] {$\varepsilon$} (s2);
+  \draw[->] (s2) -- node[above left] {$\varepsilon$} (s3);
+  \draw[->] (s2) -- node[below left] {$\varepsilon$} (s4);
+  \draw[->] (s3) -- node[above right] {$b$} (s2);
+  \draw[->] (s4) -- node[below right] {$c$} (s2);
+\end{tikzpicture}
+\end{center}
+```
+
+**ステップ1：ε-閉包を計算**
+
+各状態のε-閉包（ε遷移だけで到達できる状態の集合）：
+- ε-closure(0) = {0}
+- ε-closure(1) = {1, 2, 3, 4}（1からε遷移で2へ、2からε遷移で3,4へ）
+- ε-closure(2) = {2, 3, 4}
+- ε-closure(3) = {3}
+- ε-closure(4) = {4}
+
+**ステップ2：DFAの構築**
+
+開始状態：{0}
+
+遷移表を作成：
+
+| DFA状態 | a | b | c |
+|---------|---|---|---|
+| {0} | {1,2,3,4} | ∅ | ∅ |
+| {1,2,3,4} | ∅ | {2,3,4} | {2,3,4} |
+| {2,3,4} | ∅ | {2,3,4} | {2,3,4} |
+| ∅ | ∅ | ∅ | ∅ |
+
+結果のDFA：
+
+```{=latex}
+\begin{center}
+\begin{tikzpicture}[
+  >=stealth',
+  node distance=3.5cm,
+  state/.style={circle, draw, minimum size=12mm},
+  accept/.style={state, double}
+]
+  \node[state] (s0) {\{0\}};
+  \node[accept] (s1234) [right of=s0] {\{1,2,3,4\}};
+  \node[accept] (s234) [right of=s1234] {\{2,3,4\}};
+  
+  \draw[->] ([xshift=-1cm]s0.west) -- (s0);
+  \draw[->] (s0) -- node[above] {$a$} (s1234);
+  \draw[->] (s1234) to[bend left=20] node[above] {$b,c$} (s234);
+  \draw[->] (s234) edge[loop right] node[right] {$b,c$} ();
+\end{tikzpicture}
+\end{center}
+```
+
+#### 複雑な例：`(a|b)*abb` の変換
+
+では、前述の `(a|b)*abb` のNFAをDFAに変換してみましょう。
+
+**ステップ1：NFAの状態に番号を付け直す**
+
+分かりやすくするため、状態に0から8までの番号を付けます。
+
+**ステップ2：ε-閉包の計算**
+
+開始状態0のε-閉包：{0, 1, 2, 5}（ε遷移で到達可能なすべての状態）
+
+**ステップ3：遷移表の構築**
+
+| DFA状態 | a | b |
+|---------|---|---|
+| A={0,1,2,5} | B={0,1,2,3,5,6} | C={0,1,2,4,5} |
+| B={0,1,2,3,5,6} | B={0,1,2,3,5,6} | D={0,1,2,4,5,7} |
+| C={0,1,2,4,5} | B={0,1,2,3,5,6} | C={0,1,2,4,5} |
+| D={0,1,2,4,5,7} | B={0,1,2,3,5,6} | E={0,1,2,4,5,8} |
+| E={0,1,2,4,5,8} | B={0,1,2,3,5,6} | C={0,1,2,4,5} |
+
+ここで、状態8を含む集合Eが受理状態となります。
+
+#### 同じ正規表現のDFA（簡略化後）
+
+実際には、到達不可能な状態を除去し、状態名を簡略化すると：
 
 ```{=latex}
 \begin{center}
@@ -429,9 +773,13 @@ NFAをDFAに変換すると（部分集合構成法という手法を使いま�
 \end{center}
 ```
 
+このDFAは、「aまたはbを任意回繰り返した後、abbで終わる」文字列を正確に認識します。
+
+状態3と4が統合され、より簡潔なDFAになりました。
+
 #### なぜ括弧の対応は無理なのか
 
-では、なぜオートマトン（正規表現）では括弧の対応がチェックできないのでしょうか？
+さて、正規表現は結局のところDFAに変換できることがわかりました。では、なぜオートマトン（正規表現）では括弧の対応がチェックできないのでしょうか？
 
 括弧の対応を確認するには、以下のような処理が必要です：
 - `(`を読んだら、「今までに読んだ開き括弧の数」を1増やす
@@ -444,17 +792,6 @@ NFAをDFAに変換すると（部分集合構成法という手法を使いま�
 - ...無限に続く
 
 オートマトンは「有限個の状態」しか持てないので、「無限に増える可能性がある括弧の数」を記憶できません。これが正規表現の根本的な限界です。
-
-#### 実用上の意味
-
-このような理論的な背景は、実際のプログラミングにも影響します。
-
-皆さんが使っている正規表現エンジンは、内部ではオートマトンのような仕組みを使っていることが多いのです：
-
-- **シンプルな正規表現エンジン**：DFAを使って高速に動作（grepの一部など）
-- **高機能な正規表現エンジン**：NFAをベースにして、後方参照などの便利な機能を追加（Java、Python、Perlなど）
-
-ただし、現代の「正規表現」は、実は理論的な「正規言語」を超えた機能を持っています。たとえば、Javaの正規表現で使える後方参照（`(\\w+)\\s+\\1`のように同じ単語の繰り返しを検出）は、純粋なオートマトンでは表現できない機能です。
 
 ### 言語の階層：正規表現 < 文脈自由文法 < ...
 
