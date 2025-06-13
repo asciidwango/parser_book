@@ -58,9 +58,219 @@ public boolean parseP() {
 }
 ```
 
-## JSONの構文解析器を生成する
+## Dyck言語の構文解析器を生成する
 
-LL(1)構文解析器生成系で、JSONのパーザが作れることを示す。これを通じて、構文解析器生成系が実用的に使えることを理解してもらう。
+先ほどのDyck言語のPEG定義：
+
+```text
+D <- P;
+P <- "(" P ")" P / "";
+```
+
+をJavaコードに変換していきます。
+
+このとき、PEGからJavaコードへの機械的な変換は、以下の規則に従います：
+
+1. **非終端記号**：非終端記号`X`に対して `parseX()` という名前のメソッドを生成
+2. **文字列リテラル**：`match("文字列")` の呼び出しに変換
+3. **連接**：各要素を順番に呼び出し、すべて成功したときのみ成功
+4. **順序付き選択**：最初の選択肢を試し、失敗したらバックトラックして次を試す
+5. **繰り返し**：ループ構造に変換
+
+```java
+public class DyckParser {
+    private String input;
+    private int position;
+    
+    public DyckParser(String input) {
+        this.input = input;
+        this.position = 0;
+    }
+    
+    // D <- P
+    public boolean parseD() {
+        return parseP();
+    }
+    
+    // P <- "(" P ")" P / ""
+    public boolean parseP() {
+        // 現在位置を保存（バックトラック用）
+        int savedPos = position;
+        
+        // まず "(" P ")" P を試す
+        if (match("(")) {
+            if (parseP()) {  // 最初のP
+                if (match(")")) {
+                    if (parseP()) {  // 2番目のP
+                        return true;  // すべて成功
+                    }
+                }
+            }
+        }
+        
+        // 失敗したらバックトラック
+        position = savedPos;
+        
+        // 次に空文字列 "" を試す（常に成功）
+        return true;
+    }
+    
+    // 文字列のマッチングを行うヘルパーメソッド
+    private boolean match(String str) {
+        if (position + str.length() <= input.length() &&
+            input.startsWith(str, position)) {
+            position += str.length();
+            return true;
+        }
+        return false;
+    }
+    
+    // パース実行メソッド
+    public boolean parse() {
+        boolean result = parseD();
+        return result && position == input.length();  // 全体を消費したか確認
+    }
+}
+```
+
+このようにして、比較的シンプルにPEGからDyck言語の構文解析器を生成することができました。
+
+### より洗練された実装
+
+実際の構文解析器生成系では、抽象構文木を返すような、洗練された実装を行います：
+
+```java
+public class DyckParserWithAST {
+    private String input;
+    private int position;
+    
+    // 抽象構文木のノード
+    static class Node {
+        String type;
+        List<Node> children = new ArrayList<>();
+        
+        Node(String type) {
+            this.type = type;
+        }
+    }
+    
+    public DyckParserWithAST(String input) {
+        this.input = input;
+        this.position = 0;
+    }
+    
+    // D <- P （ASTを返すバージョン）
+    public Node parseD() {
+        Node pNode = parseP();
+        if (pNode != null) {
+            Node dNode = new Node("D");
+            dNode.children.add(pNode);
+            return dNode;
+        }
+        return null;
+    }
+    
+    // P <- "(" P ")" P / ""
+    public Node parseP() {
+        int savedPos = position;
+        
+        // "(" P ")" P を試す
+        if (match("(")) {
+            Node p1 = parseP();
+            if (p1 != null && match(")")) {
+                Node p2 = parseP();
+                if (p2 != null) {
+                    Node node = new Node("P");
+                    node.children.add(new Node("("));
+                    node.children.add(p1);
+                    node.children.add(new Node(")"));
+                    node.children.add(p2);
+                    return node;
+                }
+            }
+        }
+        
+        // バックトラック
+        position = savedPos;
+        
+        // 空文字列の場合
+        return new Node("P_empty");
+    }
+    
+    private boolean match(String str) {
+        if (position + str.length() <= input.length() &&
+            input.startsWith(str, position)) {
+            position += str.length();
+            return true;
+        }
+        return false;
+    }
+}
+```
+
+### 構文解析器生成系の実装
+
+実際の構文解析器生成系では、以下のようなステップで自動生成を行います：
+
+1. **PEG文法の解析**：PEG記法で書かれた文法定義自体を解析
+2. **中間表現の生成**：文法規則を内部的なデータ構造に変換
+3. **コード生成**：テンプレートを使ってJavaコードを出力
+
+```java
+// 簡単な構文解析器生成系の例
+public class SimplePEGGenerator {
+    // 文法規則を表すクラス
+    static class Rule {
+        String name;
+        Expression body;
+    }
+    
+    // PEG式を表す抽象クラス
+    abstract static class Expression {
+        abstract String generateCode(String indent);
+    }
+    
+    // 文字列リテラル
+    static class Literal extends Expression {
+        String value;
+        
+        String generateCode(String indent) {
+            return indent + "if (match(\"" + value + "\")) {\n";
+        }
+    }
+    
+    // 連接
+    static class Sequence extends Expression {
+        List<Expression> elements;
+        
+        String generateCode(String indent) {
+            StringBuilder code = new StringBuilder();
+            for (Expression e : elements) {
+                code.append(e.generateCode(indent));
+            }
+            return code.toString();
+        }
+    }
+    
+    // コード生成のメインメソッド
+    public String generateParser(List<Rule> rules) {
+        StringBuilder code = new StringBuilder();
+        code.append("public class GeneratedParser {\n");
+        
+        // 各規則に対してメソッドを生成
+        for (Rule rule : rules) {
+            code.append("    public boolean parse" + rule.name + "() {\n");
+            code.append(rule.body.generateCode("        "));
+            code.append("    }\n\n");
+        }
+        
+        code.append("}\n");
+        return code.toString();
+    }
+}
+```
+
+このように、PEGの文法定義から機械的にJavaコードを生成することで、手書きの退屈な作業を自動化できます。実際の構文解析器生成系では、エラー処理、最適化、デバッグ情報の付加など、より高度な機能も実装されています。
 
 ## 構文解析器生成系の分類
 
@@ -102,6 +312,7 @@ graph LR
     I[ユーザーコード (main関数など)] --> H;
     H --> J[実行ファイル];
 ```
+
 *図6.Y Yacc/Lexの連携フロー*
 
 ただし、例外もあります。GNU bisonはyaccと違って、LALR(1)より広いGLR（Generalized LR：一般化LR）構文解析器も生成できるので、GLR構文解析器生成系であるとも言えるのです。
