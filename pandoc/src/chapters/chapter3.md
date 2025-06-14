@@ -3,9 +3,9 @@
 
 2章で構文解析に必要な基本概念について学ぶことができました。この章ではJSONという実際に使われている言語を題材に、より実践的な構文解析のやり方を学んでいきます。
 
-## JSON（JavaScript Object Notation）の概要
+## JSONの概要
 
-JSONは、WebサービスにアクセスするためのAPIで非常に一般的に使われているデータフォーマットです。また、企業内サービス間で連携するときにも非常によく使われます。皆さんは何らかの形でJSONに触れたことがあるのではないかと思います。
+JSON（JavaScript Object Notation）は、WebサービスにアクセスするためのAPIで非常に一般的に使われているデータフォーマットです。また、企業内サービス間で連携するときにも非常によく使われます。皆さんは何らかの形でJSONに触れたことがあるのではないかと思います。
 
 JSONは元々は、JavaScriptのサブセットとして、オブジェクトに関する部分だけを切り出したものでしたが、現在はECMA-404[^1]で標準化されており、色々な言語でJSONを扱うライブラリがあります。また、JSONはデータ交換用フォーマットの中でも非常にシンプルであるという特徴があり、そのシンプルさ故か、同じ言語でもJSONを扱うライブラリが乱立する程です。今のWebアプリケーション開発に携わる開発者にとってJSONは避けて通れないといってよいでしょう。
  
@@ -148,12 +148,12 @@ RBRACE = "}" ws;
 LBRACKET = "[" ws;
 RBRACKET = "]" ws;
 
-ws = (" " | "\t" | "\n" | "\r")* ;
-CHAR = [^"\\] // "または\以外の文字 (バックスラッシュをエスケープ)
+ws = (" " | "\\t" | "\\n" | "\\r")* ;
+CHAR = any character except " and backslash // "またはバックスラッシュ以外の文字
      | "\\" ("\"" | "\\" | "/" | "b" | "f" | "n" | "r" | "t") // エスケープ文字
-     | "\\" "u" HEX HEX HEX HEX ; // \uXXXX の形式
-HEX = [0-9a-fA-F];
-INT = ["-"] ('0' | (`[1-9]` {`[0-9]`})) ; // 0 または 1-9で始まる数字列
+     | "\\" "u" HEX HEX HEX HEX ; // Unicode escape sequence (uXXXX) の形式
+HEX = hexadecimal digit (0-9, a-f, A-F);
+INT = optional minus sign ('0' | (digit 1-9 {digit 0-9})) ; // 0 または 1-9で始まる数字列
 ```
 
 これまで説明したJSONの要素と比較して見慣れない記号が出てきましたが、一つ一つ見て行きましょう。
@@ -203,7 +203,7 @@ object = LBRACE RBRACE | LBRACE pair {COMMA pair} RBRACE;
 {"x":1,"y":2,"z":3}
 ```
 
-しかし、以下のテキストは、`object`に当てはまらず、エラーになります。これは、規則の中を見ると、カンマ（`COMMA`）は区切り文字であるためです。
+しかし、以下のテキストは、`object`に当てはまらず、エラーになります。`{COMMA pair}`とあるように、カンマは後ろにペアを必要とするからです。
 
 ```js
 {"x":1,} // ,で終わっている
@@ -270,7 +270,7 @@ array = LBRACKET RBRACKET | LBRACKET value {COMMA value} RBRACKET ;
 ["foo"]
 ```
 
-しかし、以下のテキストは、`array`に当てはまらず、エラーになります。`{COMMA pair}`とあるように、カンマは必ず後ろにペアを必要とするからです。
+しかし、以下のテキストは、`array`に当てはまらず、エラーになります。`{COMMA pair}`とあるように、カンマは必ず後ろに`value`を必要とするからです。
 
 ```js
 [1,] // ,で終わっている
@@ -348,7 +348,7 @@ JSONのBNFは、非常に少数の規則だけで表現することができま�
 
 - 一要素の配列があり、その要素はオブジェクトであり、キー`"a"`に対応する要素の中に配列があって、その配列は空配列である
 
-といったことも、JSONのBNFでは以下のように表現することができます。
+といったことも、JSONでは以下のように表現することができます。
 
 ```json
 [{"a":[]}]
@@ -648,21 +648,32 @@ public class PegJsonParser implements JsonParser {
                             break;
                         case 'u':
                             if(cursor + 4 <= input.length()) {
-                                char[] characters = input.substring(cursor, cursor + 4).toCharArray();
-                                for(char character:characters) {
-                                    if(!isHexChar(character)) {
-                                        throwParseException("invalid unicode escape: " + character);
+                                char[] chars = input.substring(
+                                    cursor, cursor + 4).toCharArray();
+                                for(char ch:chars) {
+                                    if(!isHexChar(ch)) {
+                                        throwParseException(
+                                            "invalid unicode escape: " + ch
+                                        );
                                     }
                                 }
-                                char result = (char)Integer.parseInt(new String(characters), 16);
+                                char result = (char)Integer.parseInt(
+                                    new String(characters), 16
+                                );
                                 builder.append(result);
                                 cursor += 4;
                             } else {
-                                throwParseException("invalid unicode escape: " + input.substring(cursor));
+                                throwParseException(
+                                    "invalid unicode escape: " + 
+                                        input.substring(cursor)
+                                );
                             }
                             break;
                         default:
-                            throwParseException("expected: b|f|n|r|t|\"|\\|/ actual: " + nextCh);
+                            throwParseException(
+                                "expected: b|f|n|r|t|\"|\\|/ actual: " + 
+                                    nextCh
+                            );
                     }
                     break;
                 case '"':
@@ -704,7 +715,9 @@ public class PegJsonParser implements JsonParser {
         if(start == cursor) {
             throwParseException("expected: [0-9] actual: " + (ch != 0 ? ch : "EOF"));
         }
-        return new JsonAst.JsonNumber(Integer.parseInt(input.substring(start, cursor)));
+        return new JsonAst.JsonNumber(
+            Integer.parseInt(input.substring(start, cursor))
+        );
     }
 
     private Pair<JsonAst.JsonString, JsonAst.JsonValue> parsePair() {
@@ -725,7 +738,8 @@ public class PegJsonParser implements JsonParser {
         }
 
         parseLBrace();
-        List<Pair<JsonAst.JsonString, JsonAst.JsonValue>> members = new ArrayList<>();
+        List<Pair<JsonAst.JsonString, JsonAst.JsonValue>> members =
+            new ArrayList<>();
         var member = parsePair();
         members.add(member);
         try {
@@ -804,11 +818,13 @@ public class PegJsonParser implements JsonParser {
         } catch (ParseException e) {
             cursor = backup;
         }
-        // ... (以下同様に parseObject, parseArray, parseTrue, parseFalse, parseNull と続く)
+        // parseObject(), parseArray(), parseTrue(), parseFalse(),
+        // parseNull() と続く...
         return parseNull();
     }
 ```
-この`parseValue()`の実装は、BNFの`value = string | number | object | array | true | false | null;`という定義に対応しています。
+
+`parseValue()`の実装は、BNFの`value = string | number | object | array | true | false | null;`という定義に対応しています。
 
 `|`は「または」を意味するので、「valueは、stringまたはnumberまたはobjectまたは...」という意味になります。このコードでは、それぞれの可能性を順番に試していきます。
 
@@ -818,7 +834,7 @@ public class PegJsonParser implements JsonParser {
 
 このように、失敗したら元の位置に戻って別の可能性を試すことを「バックトラック」と呼びます。
 
-ちなみに、この順番は重要です。たとえば、`true`という入力は、「ダブルクォートで始まっていない」ので`parseString()`では失敗し、`parseTrue()`で成功します。
+ちなみに、この順番は重要です。`value`の例では右辺がそれぞれ排他的なので問題ありませんが、順番を変えると結果が変わってしまうことがあります。
 
 ### nullの構文解析メソッド
 
@@ -833,7 +849,7 @@ private JsonAst.JsonNull parseNull() {
 
 ```
 
-　このメソッドで行っていることを見ていきましょう。このメソッドでは、入力である`input`の現在位置が`"null"`という文字列で始まっているかをチェックします。もしそうなら、**JSONのnull**をあらわす`JsonAst.JsonNull`のインスタンスを返します。もし、先頭が`"null"`でなければ、構文解析は失敗なので例外を発生させますが、これは`recognize()`メソッドの中で行われています。`recognize()`の内部では、入力の現在位置と与えられた文字列を照合して、マッチしない場合例外を投げます。
+このメソッドで行っていることを見ていきましょう。このメソッドでは、入力である`input`の現在位置が`"null"`という文字列で始まっているかをチェックします。もしそうなら、**JSONのnull**をあらわす`JsonAst.JsonNull`のインスタンスを返します。もし、先頭が`"null"`でなければ、構文解析は失敗なので例外を発生させますが、これは`recognize()`メソッドの中で行われています。`recognize()`の内部では、入力の現在位置と与えられた文字列を照合して、マッチしない場合例外を投げます。
 
 次に、`skipWhitespace()`メソッドを呼び出して、「空白の読み飛ばし」を行っています。
 
@@ -874,7 +890,6 @@ private JsonAst.JsonFalse parseFalse() {
 ```java
     private JsonAst.JsonNumber parseNumber() {
         // 本書の実装では、JSONの数値型を整数のみに限定して扱います。
-        // ECMA-404仕様では小数や指数表現も許容されますが、ここでは構文解析の基本を学ぶため単純化しています。
         int start = cursor;
         char ch = 0;
         // オプショナルなマイナス記号
@@ -897,22 +912,29 @@ private JsonAst.JsonFalse parseFalse() {
                 }
             } else {
                 // 数字で始まらない場合はエラー
-                throwParseException("expected: digit actual: " + (cursor < input.length() ? input.charAt(cursor) : "EOF"));
+                throwParseException(
+                    "expected: digit actual: " + 
+                    (cursor < input.length() ? input.charAt(cursor) : "EOF")
+                );
             }
         } else {
              throwParseException("expected: digit actual: EOF");
         }
 
-        if (digitsStart == cursor && !(input.charAt(digitsStart-1) == '0' && (digitsStart > start && input.charAt(start) == '-'))) { // "0"単体または"-0"はOKだが、"-"のみや、"-A"などはだめ
+        if (digitsStart == cursor && 
+          !(input.charAt(digitsStart-1) == '0' && 
+          (digitsStart > start && input.charAt(start) == '-'))) {
+             // "0"単体または"-0"はOKだが、"-"のみや、"-A"などはだめ
              if(digitsStart > start && input.charAt(start) == '-'){ // "-" のみのケース
-                 throwParseException("expected: digit after '-' actual: " + (cursor < input.length() ? input.charAt(cursor) : "EOF"));
+                 throwParseException(
+                    "expected: digit after '-' actual: " + 
+                    (cursor < input.length() ? input.charAt(cursor) : "EOF")
+                 );
              }
         }
         
         String numberStr = input.substring(start, cursor);
         try {
-            // ここでは簡単のためdoubleとしていますが、より厳密にはBigDecimalなどを使うべきケースもあります。
-            // また、この実装はECMA-404のnumberのBNFとは完全に一致していません（小数部、指数部を省略）。
             double value = Double.parseDouble(numberStr);
             skipWhitespace();
             return new JsonAst.JsonNumber(value);
@@ -924,8 +946,7 @@ private JsonAst.JsonFalse parseFalse() {
     }
 ```
 
-`parseNumber()` メソッド（PegJsonParser内）では、入力文字列から数値部分を読み取り、`Double.parseDouble` を用いて数値に変換しています。この実装は、ECMA-404で定義されるJSONの数値型の完全な仕様（小数部、指数部を含む）には対応しておらず、主に整数および一部の小数表現を扱えるように単純化されています。
-ECMA-404仕様では、数値は整数部、小数部（オプション）、指数部（オプション）を持つことができます。例えば、`-0.123e+10` のような形式も許容されます。本書の実装では簡単のため整数のみを対象としていますが、より厳密なパーサーでは、これらの形式に対応するために `BigDecimal` クラスを使用したり、BNF定義に完全に準拠した数値解析ロジック（小数点の有無、`e` または `E` に続く指数部の解析など）を実装する必要があります。例えば、`JsonAst.JsonNumber` の型を `BigDecimal` に変更し、`parseNumber` 内で `new BigDecimal(numberStr)` を使用するように修正することが考えられます。ただし、本書では構文解析の基本的な流れを理解することを優先しています。
+`parseNumber()` メソッド（PegJsonParser内）では、入力文字列から数値部分を読み取り、`Double.parseDouble` を用いて数値に変換しています。この実装は、ECMA-404で定義されるJSONの数値型の完全な仕様（小数部、指数部を含む）には対応しておらず、整数のみを扱えるように単純化されています。
 
 ### 文字列の構文解析メソッド
 
@@ -978,21 +999,33 @@ ECMA-404仕様では、数値は整数部、小数部（オプション）、指
                             break;
                         case 'u':
                             if(cursor + 4 <= input.length()) {
-                                char[] characters = input.substring(cursor, cursor + 4).toCharArray();
-                                for(char character:characters) {
-                                    if(!isHexChar(character)) {
-                                        throwParseException("invalid unicode escape: " + character);
+                                char[] chars = input.substring(
+                                    cursor, cursor + 4
+                                ).toCharArray();
+                                for(char ch:chars) {
+                                    if(!isHexChar(ch)) {
+                                        throwParseException(
+                                            "invalid unicode escape: " + ch
+                                        );
                                     }
                                 }
-                                char result = (char)Integer.parseInt(new String(characters), 16);
+                                char result = (char)Integer.parseInt(
+                                    new String(characters), 16
+                                );
                                 builder.append(result);
                                 cursor += 4;
                             } else {
-                                throwParseException("invalid unicode escape: " + input.substring(cursor));
+                                throwParseException(
+                                    "invalid unicode escape: " + 
+                                    input.substring(cursor)
+                                );
                             }
                             break;
                         default:
-                            throwParseException("expected: b|f|n|r|t|\"|\\|/ actual: " + nextCh);
+                            throwParseException(
+                                "expected: b|f|n|r|t|\"|\\|/ actual: " + 
+                                nextCh
+                            );
                     }
                     break;
                 case '"':
@@ -1054,8 +1087,7 @@ ECMA-404仕様では、数値は整数部、小数部（オプション）、指
 
 `parseString` メソッド内の `switch` 文はこれらのエスケープシーケンスを処理しています。
 
-そして、`while`文が終わったあとで、
-
+`while`文が終わったあとで、
 
 ```java
         if(ch != '"') {
@@ -1129,9 +1161,11 @@ parseLBracket();
         } else {
             String substring = input.substring(cursor);
             int endIndex = cursor + 
-                (literal.length() > substring.length() ? substring.length() : literal.length());
+                (literal.length() > substring.length() ? 
+                substring.length() : literal.length());
             throwParseException(
-                "expected: " + literal + ", actual: " + input.substring(cursor, endIndex)
+                "expected: " + literal + 
+                ", actual: " + input.substring(cursor, endIndex)
             );
         }
     }
@@ -1186,7 +1220,7 @@ return new JsonAst.JsonArray(values);
 array = LBRACKET RBRACKET | LBRACKET {value {COMMA value}} RBRACKET ;
 ```
 
-に対応していることがわかるでしょうか（ただし、ここでのBNFは `array = LBRACKET RBRACKET | LBRACKET value {COMMA value} RBRACKET ;` のように、最初の要素が必須である点に注意してください。これはコードの実装と一致しています）。読み方のポイントは、`|`の後を、例外をキャッチした後の処理ととらえることです。
+に対応していることがわかるでしょうか 。読み方のポイントは、`|`の後を、例外をキャッチした後の処理ととらえることです。
 
 ### オブジェクトの構文解析メソッド
 
@@ -1204,7 +1238,8 @@ array = LBRACKET RBRACKET | LBRACKET {value {COMMA value}} RBRACKET ;
         }
 
         parseLBrace();
-        List<Pair<JsonAst.JsonString, JsonAst.JsonValue>> members = new ArrayList<>();
+        List<Pair<JsonAst.JsonString, JsonAst.JsonValue>> members =
+            new ArrayList<>();
         var member = parsePair();
         members.add(member);
         try {
@@ -1339,7 +1374,9 @@ public class SimpleJsonTokenizer implements JsonTokenizer {
         while(index < input.length()) {
             char ch = input.charAt(index);
             if(!isDigit(ch)) {
-                fetched = new Token(Token.Type.INTEGER, positive ? result : -result);
+                fetched = new Token(
+                    Token.Type.INTEGER, positive ? result : -result
+                );
                 return true;
             }
             result = result * 10 + (ch - '0');
@@ -1393,12 +1430,19 @@ public class SimpleJsonTokenizer implements JsonTokenizer {
                         break;
                     case 'u':
                         // \u の後に4文字の16進数が必要
-                        if(index + 4 >= input.length()) { // index は 'u' の次の文字を指している
-                            throw new TokenizerException("unicode escape sequence is too short: " + input.substring(index -1));
+                        if(index + 4 >= input.length()) { 
+                            // index は 'u' の次の文字を指している
+                            throw new TokenizerException(
+                                "unicode escape sequence is too short: " + 
+                                input.substring(index -1)
+                            );
                         }
-                        var unicodeEscape = input.substring(index, index + 4); // 'u'の次の文字から4文字取得
+                        // 'u'の次の文字から4文字取得
+                        var unicodeEscape = input.substring(index, index + 4); 
                         if(!unicodeEscape.matches("[0-9a-fA-F]{4}")) {
-                            throw new TokenizerException("illegal unicode escape sequence: \\u" + unicodeEscape);
+                            throw new TokenizerException(
+                                "illegal unicode escape sequence: \\u" + unicodeEscape
+                            );
                         }
                         builder.append((char)Integer.parseInt(unicodeEscape, 16));
                         index += 4; // 4文字消費
@@ -1418,7 +1462,9 @@ public class SimpleJsonTokenizer implements JsonTokenizer {
             fetched = new Token(type, value);
             index += literal.length();
         } else {
-            throw new TokenizerException("expected: " + literal + ", actual: " + head);
+            throw new TokenizerException(
+                "expected: " + literal + ", actual: " + head
+            );
         }
     }
 
@@ -1474,11 +1520,15 @@ public class SimpleJsonTokenizer implements JsonTokenizer {
                             index += 4;
                             return true;
                         } else {
-                            throw new TokenizerException("expected: null, actual: " + actual);
+                            throw new TokenizerException(
+                                "expected: null, actual: " + actual
+                            );
                         }
                     } else {
                         actual = input.substring(index);
-                        throw new TokenizerException("expected: null, actual: " + actual);
+                        throw new TokenizerException(
+                            "expected: null, actual: " + actual
+                        );
                     }
                 }
                 case '"':
@@ -1491,8 +1541,11 @@ public class SimpleJsonTokenizer implements JsonTokenizer {
                     index++; // 現在の空白文字を消費
                     // 連続する空白を読み飛ばす
                     while(index < input.length()) {
-                        char nextChar = input.charAt(index);
-                        if (nextChar == ' ' || nextChar == '\t' || nextChar == '\n' || nextChar == '\r') {
+                        char nextCh = input.charAt(index);
+                        if (nextCh == ' ' || 
+                            nextCh == '\t' || 
+                            nextCh == '\n' || 
+                            nextCh == '\r') {
                             index++;
                         } else {
                             break;
@@ -1509,7 +1562,8 @@ public class SimpleJsonTokenizer implements JsonTokenizer {
                         index++;
                         return tokenizeNumber(false);
                     } else {
-                        throw new TokenizerException("unexpected character: " + ch);
+                        throw new TokenizerException(
+                            "unexpected character: " + ch);
                     }
             }
         }
@@ -1708,83 +1762,93 @@ PEG版と異なり、途中で失敗したら後戻り（バックトラック�
 
 **入力:** `{"key": "value"}`
 
-**1. `SimpleJsonParser.parse("{\"key\": \"value\"}")` が呼び出される。**
-   - `tokenizer = new SimpleJsonTokenizer("{\"key\": \"value\"}")` が実行される。
-   - `tokenizer.moveNext()` が呼び出される。
-     - `SimpleJsonTokenizer.moveNext()`:
-       - `index` は 0。`input.charAt(0)` は `{`。
-       - `accept("{", Token.Type.LBRACE, "{")` が呼び出される。
-       - `fetched` に `Token(LBRACE, "{")` が設定され、`index` は 1 になる。
-       - `true` を返す。
-   - `value = parseValue()` が呼び出される。
+1. `SimpleJsonParser.parse("{\"key\": \"value\"}")`:
 
-**2. `SimpleJsonParser.parseValue()` 内:**
-   - `token = tokenizer.current()` により、`Token(LBRACE, "{")` を取得。
-   - `switch(token.type)` で `LBRACE` ケースが選択され、`parseObject()` が呼び出される。
+  - `tokenizer = new SimpleJsonTokenizer("{\"key\": \"value\"}")` が実行される。
+  - `tokenizer.moveNext()` が呼び出される。
+    - `SimpleJsonTokenizer.moveNext()`:
+      - `index` は 0。`input.charAt(0)` は `{`。
+      - `accept("{", Token.Type.LBRACE, "{")` が呼び出される。
+      - `fetched` に `Token(LBRACE, "{")` が設定され、`index` は 1 になる。
+      - `true` を返す。
+  - `value = parseValue()` が呼び出される。
 
-**3. `SimpleJsonParser.parseObject()` 内:**
-   - `tokenizer.current().type` は `LBRACE` なので最初の `if` はパス。
-   - `tokenizer.moveNext()` が呼び出される。
-     - `SimpleJsonTokenizer.moveNext()`:
-       - `index` は 1。`input.charAt(1)` は `"`。
-       - `tokenizeStringLiteral()` が呼び出される。
-         - `"key"` を読み取り、`fetched` に `Token(STRING, "key")` が設定され、`index` は 6 になる。
-         - `true` を返す。
-   - `tokenizer.current().type` は `RBRACE` ではない。
-   - `pair = parsePair()` が呼び出される。
+2. `SimpleJsonParser.parseValue()`:
 
-**4. `SimpleJsonParser.parsePair()` 内:**
-   - `keyToken = tokenizer.current()` により `Token(STRING, "key")` を取得。
-   - `key = new JsonAst.JsonString("key")` が作成される。
-   - `tokenizer.moveNext()` が呼び出される。
-     - `SimpleJsonTokenizer.moveNext()`:
-       - `index` は 6。`input.charAt(6)` は `:`。
-       - `accept(":", Token.Type.COLON, ":")` が呼び出される。
-       - `fetched` に `Token(COLON, ":")` が設定され、`index` は 7 になる。
-       - `true` を返す。
-   - `tokenizer.current().type` は `COLON` なので `if` はパス。
-   - `tokenizer.moveNext()` が呼び出される。
-     - `SimpleJsonTokenizer.moveNext()`:
-       - `index` は 7。`input.charAt(7)` は `"`。
-       - `tokenizeStringLiteral()` が呼び出される。
-         - `"value"` を読み取り、`fetched` に `Token(STRING, "value")` が設定され、`index` は 14 になる。
-         - `true` を返す。
-   - `value = parseValue()` が呼び出される。
+  - `token = tokenizer.current()` により、`Token(LBRACE, "{")` を取得。
+  - `switch(token.type)` で `LBRACE` ケースが選択され、`parseObject()` が呼び出される。
 
-**5. `SimpleJsonParser.parseValue()` (2回目) 内:**
-   - `token = tokenizer.current()` により `Token(STRING, "value")` を取得。
-   - `switch(token.type)` で `STRING` ケースが選択され、`parseString()` が呼び出される。
+3. `SimpleJsonParser.parseObject()` :
 
-**6. `SimpleJsonParser.parseString()` 内:**
-   - `currentToken.type` は `STRING` なので `if` はパス。
-   - `tokenizer.moveNext()` が呼び出される。
-     - `SimpleJsonTokenizer.moveNext()`:
-       - `index` は 14。`input.charAt(14)` は `}`。
-       - `accept("}", Token.Type.RBRACE, "}")` が呼び出される。
-       - `fetched` に `Token(RBRACE, "}")` が設定され、`index` は 15 になる。
-       - `true` を返す。
-   - `new JsonAst.JsonString("value")` を返す。
+  - `tokenizer.current().type` は `LBRACE` なので最初の `if` はパス。
+  - `tokenizer.moveNext()` が呼び出される。
+    - `SimpleJsonTokenizer.moveNext()`:
+      - `index` は 1。`input.charAt(1)` は `"`。
+      - `tokenizeStringLiteral()` が呼び出される。
+        - `"key"` を読み取り、`fetched` に `Token(STRING, "key")` が設定され、`index` は 6 になる。
+        - `true` を返す。
+  - `tokenizer.current().type` は `RBRACE` ではない。
+  - `pair = parsePair()` が呼び出される。
 
-**7. `SimpleJsonParser.parsePair()` に戻る:**
-   - `value` に `JsonAst.JsonString("value")` が設定される。
-   - `new Pair<>(key, value)` を返す。
+4. `SimpleJsonParser.parsePair()`:
 
-**8. `SimpleJsonParser.parseObject()` に戻る:**
-   - `members` に `Pair(JsonString("key"), JsonString("value"))` が追加される。
-   - `tokenizer.moveNext()` が呼び出される。
-     - `SimpleJsonTokenizer.moveNext()`:
-       - `index` は 15。`input.length()` と等しいのでループを抜け `false` を返す。
-   - `while` ループの条件が `false` になりループ終了。
-   - `tokenizer.current().type` は `RBRACE` なので `if` はパス。
-   - `new JsonAst.JsonObject(members)` を返す。
+  - `keyToken = tokenizer.current()` により `Token(STRING, "key")` を取得。
+  - `key = new JsonAst.JsonString("key")` が作成される。
+  - `tokenizer.moveNext()` が呼び出される。
+    - `SimpleJsonTokenizer.moveNext()`:
+      - `index` は 6。`input.charAt(6)` は `:`。
+      - `accept(":", Token.Type.COLON, ":")` が呼び出される。
+      - `fetched` に `Token(COLON, ":")` が設定され、`index` は 7 になる。
+      - `true` を返す。
+  - `tokenizer.current().type` は `COLON` なので `if` はパス。
+  - `tokenizer.moveNext()` が呼び出される。
+    - `SimpleJsonTokenizer.moveNext()`:
+      - `index` は 7。`input.charAt(7)` は `"`。
+      - `tokenizeStringLiteral()` が呼び出される。
+        - `"value"` を読み取り、`fetched` に `Token(STRING, "value")` が設定され、`index` は 14 になる。
+        - `true` を返す。
+  - `value = parseValue()` が呼び出される。
 
-**9. `SimpleJsonParser.parseValue()` (1回目) に戻る:**
-   - `parseObject()` の結果を返す。
+5. `SimpleJsonParser.parseValue()` (2回目) :
 
-**10. `SimpleJsonParser.parse()` に戻る:**
-    - `value` に `JsonObject` が設定される。
-    - `tokenizer.rest()` は `input.substring(15)` で空文字列 `""` を返す。
-    - `new ParseResult<>(value, "")` を返す。
+  - `token = tokenizer.current()` により `Token(STRING, "value")` を取得。
+  - `switch(token.type)` で `STRING` ケースが選択され、`parseString()` が呼び出される。
+
+6. `SimpleJsonParser.parseString()` :
+
+  - `currentToken.type` は `STRING` なので `if` はパス。
+  - `tokenizer.moveNext()` が呼び出される。
+    - `SimpleJsonTokenizer.moveNext()`:
+      - `index` は 14。`input.charAt(14)` は `}`。
+      - `accept("}", Token.Type.RBRACE, "}")` が呼び出される。
+      - `fetched` に `Token(RBRACE, "}")` が設定され、`index` は 15 になる。
+      - `true` を返す。
+  - `new JsonAst.JsonString("value")` を返す。
+
+7. `SimpleJsonParser.parsePair()` に戻る:
+
+  - `value` に `JsonAst.JsonString("value")` が設定される。
+  - `new Pair<>(key, value)` を返す。
+
+8. `SimpleJsonParser.parseObject()` に戻る:
+
+  - `members` に `Pair(JsonString("key"), JsonString("value"))` が追加される。
+  - `tokenizer.moveNext()` が呼び出される。
+    - `SimpleJsonTokenizer.moveNext()`:
+      - `index` は 15。`input.length()` と等しいのでループを抜け `false` を返す。
+  - `while` ループの条件が `false` になりループ終了。
+  - `tokenizer.current().type` は `RBRACE` なので `if` はパス。
+  - `new JsonAst.JsonObject(members)` を返す。
+
+9. `SimpleJsonParser.parseValue()` (1回目) に戻る:
+
+  - `parseObject()` の結果を返す。
+
+10. `SimpleJsonParser.parse()` に戻る:
+
+  - `value` に `JsonObject` が設定される。
+  - `tokenizer.rest()` は `input.substring(15)` で空文字列 `""` を返す。
+  - `new ParseResult<>(value, "")` を返す。
 
 このように、`SimpleJsonTokenizer` が入力文字列をトークン列に順次変換し、`SimpleJsonParser` はそのトークン列を消費しながら構文構造を組み立てていきます。`SimpleJsonTokenizer` の `moveNext()` 内の `switch` 文で空白文字 (`' '`, `\t`, `\n`, `\r'`) が処理され `index` が進められるため、`SimpleJsonParser` は空白文字の存在を意識することなく、本質的な構文解析に集中できるというメリットがあります。
 
@@ -1945,9 +2009,8 @@ JSONの字句解析器である`SimpleTokenizer`はこのようにして実装�
         // SimpleJsonTokenizerの実装では数値はToken.Type.INTEGERとして扱われる
         if (currentToken.type == Token.Type.INTEGER) {
             tokenizer.moveNext(); // トークンを消費
-            // JsonNumberはdoubleを期待するが、tokenizerはintを返すのでキャスト
-            return new JsonAst.JsonNumber((
-                (Number)currentToken.value).doubleValue()
+            return new JsonAst.JsonNumber(
+                ((Number)currentToken.value).doubleValue()
             );
         }
         throw new parser.ParseException(
@@ -2006,7 +2069,7 @@ JSONの字句解析器である`SimpleTokenizer`はこのようにして実装�
   - それ以外で、次のトークンが`,`でない場合、構文エラーを投げて終了
   - それ以外の場合：次のトークンをフェッチして来て、`parsePair()`を呼び出して、ペアを解析した後、リストにペアを追加
 
-のような動作を行います。実際のコードと対応付けてみると、より理解が進むでしょう。
+のような動作を行います。実際のJSONのオブジェクトと対応付けてみると、より理解が進むでしょう。
 
 ### parseArray
 
@@ -2055,7 +2118,7 @@ JSONの字句解析器である`SimpleTokenizer`はこのようにして実装�
   - それ以外で、次のトークンが`,`でない場合、構文エラーを投げて終了
   - それ以外の場合：次のトークンをフェッチして来て、`parseValue()`を呼び出して、`value`を解析した後、リストに`value`を追加
 
-のような動作を行います。実際のコードと対応付けてみると、より理解が進むでしょう。
+のような動作を行います。実際のJSONの配列と対応付けてみると、より理解が進むでしょう。
 
 なお、`parseArray()`のコードを読めばわかるように、ほとんどのコードは、`parseObject()`と共通のものになっています。もしこれが気になるようであれば、共通部分をくくりだすことも出来ます。
 
@@ -2063,12 +2126,12 @@ JSONの字句解析器である`SimpleTokenizer`はこのようにして実装�
 
 この章では、JSONの構文解析や字句解析を実際に作ってみることを通して、構文解析の基礎について学んでもらいました。特に、
 
-- 3.1 JSONの概要
-- 3.2 JSONのBNF
-- 3.3 JSONの構文解析器（PEG版）
-- 3.4 古典的な構文解析器の概要
-- 3.5 JSONの字句解析器
-- 3.6 JSONの構文解析器
+- JSONの概要
+- JSONのBNF
+- JSONの構文解析器（PEG版）
+- 古典的な構文解析器
+- JSONの字句解析器
+- JSONの構文解析器
 
 といった順番で、JSONの定義から入って、PEGによるJSONパーザ、字句解析器を使った構文解析器の作り方について学んでもらいました。この書籍中で使ったJSONはECMA-404で定義されている正式なJSONのサブセットになっています。たとえば、浮動小数点数が完全に扱えないという制限がありますが、構文解析器全体から見ればささいなことなので、この章を理解出来れば、JSONの構文解析について理解できたと思って構いません。
 
@@ -2080,15 +2143,16 @@ JSONの字句解析器である`SimpleTokenizer`はこのようにして実装�
 
 **演習問題**
 
-1.  **コメントのサポート:**
+1. コメントのサポート:*
 
-    *   JSONのBNF定義を拡張し、`//` から行末までの単一行コメントと、`/*` から `*/` までの複数行コメントをサポートするようにしてください。
-    *   `PegJsonParser` と `SimpleJsonTokenizer` の両方を修正し、これらのコメントを正しく無視するように実装してください。
-    *   ヒント: `PegJsonParser` では `skipWhitespace` にコメントスキップのロジックを追加するか、各解析メソッドの適切な箇所でコメントを読み飛ばす処理を挟みます。`SimpleJsonTokenizer` では `moveNext` の `switch` 文に `/` のケースを追加し、そこからコメントの種別を判定して読み飛ばす処理を実装します。
+- JSONのBNF定義を拡張し、`//` から行末までの単一行コメントと、`/*` から `*/` までの複数行コメントをサポートするようにしてください。
+  - `PegJsonParser` と `SimpleJsonTokenizer` の両方を修正し、これらのコメントを正しく無視するように実装してください。
+  -  ヒント: `PegJsonParser` では `skipWhitespace` にコメントスキップのロジックを追加するか、各解析メソッドの適切な箇所でコメントを読み飛ばす処理を挟みます。`SimpleJsonTokenizer` では `moveNext` の `switch` 文に `/` のケースを追加し、そこからコメントの種別を判定して読み飛ばす処理を実装します。
 
-2.  **数値型の拡張:**
+2. 数値型の拡張:
 
-    *   `PegJsonParser` の `parseNumber` メソッドと、`SimpleJsonTokenizer` の `tokenizeNumber` メソッドを修正し、ECMA-404仕様に準拠した数値型（小数部、指数部 `e` または `E` を含む）を正しく解析できるようにしてください。
-    *   `JsonAst.JsonNumber` の `value` フィールドの型を `double` から `java.math.BigDecimal` に変更し、精度が失われないように対応してください。
-    *   テストケースとして、`123`, `-0.5`, `1.2e3`, `0.4E-1` のような多様な数値表現を試してみてください
-[^1]: ECMA-404 The JSON data interchange syntax 2nd edition, December 2017.  https://ecma-international.org/publications-and-standards/standards/ecma-404/
+- `PegJsonParser` の `parseNumber` メソッドと、`SimpleJsonTokenizer` の `tokenizeNumber` メソッドを修正し、ECMA-404仕様に準拠した数値型（小数部、指数部 `e` または `E` を含む）を正しく解析できるようにしてください。
+  - `JsonAst.JsonNumber` の `value` フィールドの型を `double` から `java.math.BigDecimal` に変更し、精度が失われないように対応してください。
+  - テストケースとして、`123`, `-0.5`, `1.2e3`, `0.4E-1` のような多様な数値表現を試してみてください
+
+[^2]: ECMA-404 The JSON data interchange syntax 2nd edition, December 2017.  https://ecma-international.org/publications-and-standards/standards/ecma-404/
