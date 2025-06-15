@@ -833,7 +833,7 @@ C -> d C | ε
 
 この場合：
 
-- `nullable(A) = false`（`A`は必ず`a`と`c`を含むため）
+- `nullable(A) = false`（`A`は必ず`a`と`$`を含むため）
 - `nullable(B) = true`（`B -> ε`という規則があるため）
 - `nullable(C) = true`（`C -> ε`という規則があるため）
 
