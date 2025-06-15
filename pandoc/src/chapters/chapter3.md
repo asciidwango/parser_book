@@ -650,15 +650,15 @@ public class PegJsonParser implements JsonParser {
                             if(cursor + 4 <= input.length()) {
                                 char[] chars = input.substring(
                                     cursor, cursor + 4).toCharArray();
-                                for(char ch:chars) {
-                                    if(!isHexChar(ch)) {
+                                for(char c:chars) {
+                                    if(!isHexChar(c)) {
                                         throwParseException(
-                                            "invalid unicode escape: " + ch
+                                            "invalid unicode escape: " + c
                                         );
                                     }
                                 }
                                 char result = (char)Integer.parseInt(
-                                    new String(characters), 16
+                                    new String(chars), 16
                                 );
                                 builder.append(result);
                                 cursor += 4;
@@ -838,7 +838,7 @@ public class PegJsonParser implements JsonParser {
 
 ### nullの構文解析メソッド
 
-`null`の構文解析は、次のような　`parseNull()` メソッドとして定義します。
+`null`の構文解析は、次のような`parseNull()` メソッドとして定義します。
 
 ```java
 private JsonAst.JsonNull parseNull() {
@@ -1002,15 +1002,15 @@ private JsonAst.JsonFalse parseFalse() {
                                 char[] chars = input.substring(
                                     cursor, cursor + 4
                                 ).toCharArray();
-                                for(char ch:chars) {
-                                    if(!isHexChar(ch)) {
+                                for(char c:chars) {
+                                    if(!isHexChar(c)) {
                                         throwParseException(
-                                            "invalid unicode escape: " + ch
+                                            "invalid unicode escape: " + c
                                         );
                                     }
                                 }
                                 char result = (char)Integer.parseInt(
-                                    new String(characters), 16
+                                    new String(chars), 16
                                 );
                                 builder.append(result);
                                 cursor += 4;

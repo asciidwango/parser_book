@@ -233,7 +233,7 @@ public class PEG2Java {
         StringBuilder code = new StringBuilder();
         code.append("public class Parser {\n");
         // 例外クラスの定義
-        code.append("    public static class Failure " +
+        code.append("    public static class Failure ");
         code.append("extends RuntimeException {\n");
         code.append("        public Failure(String message) {\n");
         code.append("            super(message);\n");
@@ -408,7 +408,7 @@ Yacc/Lexのように、字句解析器生成系（Lex）と構文解析器生成
 | 特徴項目                     | JavaCC                                     | Yacc/Bison                                     | ANTLR                                                              |
 | ---------------------------- | ------------------------------------------ | ---------------------------------------------- | ------------------------------------------------------------------ |
 | **採用アルゴリズム**         | LL(k) (デフォルトはLL(1))                  | LALR(1) (BisonはGLRも可)                       | ALL(`*`)                                                |
-| **生成コードの言語**         | Java                                       | C, C++ (BisonはJavaなども限定的にサポート)       | Java, C++, Python, JavaScript, Go, C#, Swift, Dart, PHP (多言語対応) |
+| **生成コードの言語**         | Java                                       | C, C++ (BisonはJavaなども限定的にサポート)     | Java, C++, Python, JavaScript, Go, C#, Swift, Dart, PHP (多言語対応) |
 | **左再帰の扱い**             | 不可 (文法書き換えが必要)                    | 直接左再帰を扱える                             | 直接・間接左再帰を扱える (v4以降)                                  |
 | **曖昧性解決**               | 先読みトークン数(k)の調整、意味アクション    | 演算子の優先順位・結合規則指定、%precなどで対応 | 意味アクション、構文述語、ALL(*)による自動解決                     |
 | **エラー報告/リカバリ機能**  | 基本的                                     | `error`トークンによる限定的なリカバリ            | 高度なエラー報告、柔軟なエラーリカバリ戦略                         |
@@ -957,10 +957,6 @@ record Result<V>(V value, String rest){}
 JParser<Integer> calculator = ...;
 Result<Integer> result = calculator.parse("1+2*3");
 assert 7 == result.value();
-```java
-JParser<Integer> calculator = ...;
-Result<Integer> result = calculator.parse("1+2*3");
-assert 7 == result.value();
 ```
 
 パーサーコンビネータは、このようなどこか都合の良い`JParser<R>`を、BNF（あるいはPEG）に近い文法規則を連ねていくのに近い使い勝手で構築するための技法です。前の節で紹介した`SComb`もパーサーコンビネータでしたが基本的には同じようなものです。
@@ -982,7 +978,7 @@ assert new Result<String>("123", "").equals(string("123").parse("123"));
 次に、解析に成功したとしてその値を別の値に変換するための方法もほしいところです。たとえば、`123`という文字列を解析したとして、これは最終的に文字列ではなくintに変換したいところです。Javaのラムダ式（無名関数）を使えば、このような変換を簡潔に書けます。このようなメソッドは、ラムダ式で変換を定義できるように、次のような`map()`メソッドとして提供したいところです。
 
 ```java
-<T, U> JParser<U> map(Parser<T> parser, Function<T, U> function);
+<T, U> JParser<U> map(JParser<T> parser, Function<T, U> function);
 assert (new Result<Integer>(123, "")).equals(
     map(string("123"), v -> Integer.parseInt(v)).parse("123")
 );
@@ -996,7 +992,7 @@ BNFで`a | b`、つまり選択を書くのに相当するメソッドも必要�
 <T> JParser<T> alt(JParser<T> p1, JParser<T> p2);
 assert (new Result<String>("bar", "")).equals(
     alt(string("foo"), string("bar")).parse("bar")
-); // .parse() を追加
+);
 ```
 
 同様に、BNFで`a b`、つまり連接を書くのに相当するメソッドも必要ですが、これは次のような`seq()`メソッドとして提供します。
@@ -1050,7 +1046,7 @@ class JLiteralParser implements JParser<String> {
 このクラスは次のようにして使います。
 
 ```java
-assert new Result<String>("foo", "").equals(new JLiteralParser("foo"));
+assert new Result<String>("foo", "").equals(new JLiteralParser("foo").parse("foo"));
 ```
 
 リテラルを表すフィールド`literal`が`input`の先頭とマッチした場合、`literal`と残りの文字列からなる`Result<String>`を返します。そうでない場合は返すべき`Result`がないので`null`を返します。簡単ですね。
@@ -1061,7 +1057,7 @@ assert new Result<String>("foo", "").equals(new JLiteralParser("foo"));
 
 ```java
 public class JComb {
-  JParser<String> string(String literal) {
+  public static JParser<String> string(String literal) {
     return new JLiteralParser(literal);
   }
 }
