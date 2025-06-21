@@ -5,12 +5,12 @@ import java.util.List;
 
 public class SimpleJsonParser implements JsonParser {
     private List<Token> tokens;
-    private int currentIndex;
+    private int index;
 
     public ParseResult<Ast.JsonValue> parse(String input) {
         SimpleJsonTokenizer tokenizer = new SimpleJsonTokenizer(input);
         this.tokens = tokenizer.tokenizeAll();
-        this.currentIndex = 0;
+        this.index = 0;
         var value = parseValue();
         // 残りの入力を返すため、現在のトークン位置以降を再構築する必要がある
         // ここでは簡単のため空文字列を返す
@@ -18,15 +18,15 @@ public class SimpleJsonParser implements JsonParser {
     }
     
     private Token current() {
-        if (currentIndex < tokens.size()) {
-            return tokens.get(currentIndex);
+        if (index < tokens.size()) {
+            return tokens.get(index);
         }
         return new Token(Token.Type.EOF, null);
     }
     
     private boolean moveNext() {
-        if (currentIndex < tokens.size() - 1) {
-            currentIndex++;
+        if (index < tokens.size() - 1) {
+            index++;
             return true;
         }
         return false;
