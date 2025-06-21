@@ -1,11 +1,13 @@
 # Pandoc/LaTeX generated files
-pandoc/build/*.pdf
-pandoc/build/*.html
-pandoc/build/*.tex
-pandoc/build/*.log
-pandoc/build/*.aux
-pandoc/build/*.toc
-pandoc/build/*.out
+build/*.pdf
+build/*.html
+build/*.tex
+build/*.log
+build/*.aux
+build/*.toc
+build/*.out
+book.md
+pandoc/build/
 pandoc/src/book.md
 
 # Java/Gradle build files

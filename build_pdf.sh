@@ -9,7 +9,7 @@ echo "📚 構文解析本のPDF生成を開始します..."
 
 # ディレクトリ設定
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SRC_DIR="$SCRIPT_DIR/src"
+SRC_DIR="$SCRIPT_DIR"
 BUILD_DIR="$SCRIPT_DIR/build"
 IMG_DIR="$SCRIPT_DIR/img"
 
@@ -39,14 +39,14 @@ check_dependencies() {
 merge_chapters() {
     echo "📚 章ファイルを統合しています..."
     
-    CHAPTERS_DIR="$SRC_DIR/chapters"
-    BOOK_FILE="$SRC_DIR/book.md"
+    CHAPTERS_DIR="$SCRIPT_DIR/contents"
+    BOOK_FILE="$SCRIPT_DIR/book.md"
     
     # 書籍ファイルを初期化
     cat > "$BOOK_FILE" << 'EOF'
 <!-- 
 このファイルは自動生成されています。
-直接編集せず、src/chapters/内の個別章ファイルを編集してください。
+直接編集せず、contents/内の個別章ファイルを編集してください。
 生成コマンド: ./build_pdf.sh
 -->
 EOF
