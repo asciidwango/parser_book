@@ -1,5 +1,8 @@
 package parser;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class SimpleJsonTokenizer implements JsonTokenizer {
     private final String input;
     private int index;
@@ -12,6 +15,15 @@ public class SimpleJsonTokenizer implements JsonTokenizer {
 
     public String rest() {
         return input.substring(index);
+    }
+    
+    public List<Token> tokenizeAll() {
+        List<Token> tokens = new ArrayList<>();
+        while (moveNext()) {
+            tokens.add(current());
+        }
+        tokens.add(new Token(Token.Type.EOF, null));
+        return tokens;
     }
 
     private static boolean isDigit(char ch) {

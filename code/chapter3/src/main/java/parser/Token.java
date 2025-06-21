@@ -7,7 +7,7 @@ public class Token {
     public final Object value;
     public enum Type {
         STRING, INTEGER, NULL, TRUE, FALSE,
-        LPAREN, RPAREN, LBRACE, RBRACE, LBRACKET, RBRACKET, COMMA, COLON, SPACE
+        LPAREN, RPAREN, LBRACE, RBRACE, LBRACKET, RBRACKET, COMMA, COLON, SPACE, EOF
     }
 
     public Token(Type type, Object value) {

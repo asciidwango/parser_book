@@ -4,17 +4,36 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class SimpleJsonParser implements JsonParser {
-    private SimpleJsonTokenizer tokenizer;
+    private List<Token> tokens;
+    private int currentIndex;
 
     public ParseResult<Ast.JsonValue> parse(String input) {
-        tokenizer = new SimpleJsonTokenizer(input);
-        tokenizer.moveNext();
+        SimpleJsonTokenizer tokenizer = new SimpleJsonTokenizer(input);
+        this.tokens = tokenizer.tokenizeAll();
+        this.currentIndex = 0;
         var value = parseValue();
-        return new ParseResult<>(value, tokenizer.rest());
+        // 残りの入力を返すため、現在のトークン位置以降を再構築する必要がある
+        // ここでは簡単のため空文字列を返す
+        return new ParseResult<>(value, "");
+    }
+    
+    private Token current() {
+        if (currentIndex < tokens.size()) {
+            return tokens.get(currentIndex);
+        }
+        return new Token(Token.Type.EOF, null);
+    }
+    
+    private boolean moveNext() {
+        if (currentIndex < tokens.size() - 1) {
+            currentIndex++;
+            return true;
+        }
+        return false;
     }
 
     private Ast.JsonValue parseValue() {
-        var token = tokenizer.current();
+        var token = current();
         switch(token.type) {
             case INTEGER:
                 return parseNumber();
@@ -35,53 +54,53 @@ public class SimpleJsonParser implements JsonParser {
     }
 
     private Ast.JsonTrue parseTrue() {
-        if(!tokenizer.current().equals(true)) {
+        if(current().type == Token.Type.TRUE) {
             return Ast.JsonTrue.getInstance();
         }
-        throw new parser.ParseException("expected: true, actual: " + tokenizer.current().value);
+        throw new parser.ParseException("expected: true, actual: " + current().value);
     }
 
     private Ast.JsonFalse parseFalse() {
-        if(!tokenizer.current().equals(false)) {
+        if(current().type == Token.Type.FALSE) {
             return Ast.JsonFalse.getInstance();
         }
-        throw new parser.ParseException("expected: false, actual: " + tokenizer.current().value);
+        throw new parser.ParseException("expected: false, actual: " + current().value);
     }
 
     private Ast.JsonNull parseNull() {
-        if(tokenizer.current().value == null) {
+        if(current().type == Token.Type.NULL) {
             return Ast.JsonNull.getInstance();
         }
-        throw new parser.ParseException("expected: null, actual: " + tokenizer.current().value);
+        throw new parser.ParseException("expected: null, actual: " + current().value);
     }
 
     private Ast.JsonString parseString() {
-        return new Ast.JsonString((String)tokenizer.current().value);
+        return new Ast.JsonString((String)current().value);
     }
 
     private Ast.JsonNumber parseNumber() {
-        var value = (Integer)tokenizer.current().value;
+        var value = (Integer)current().value;
         return new Ast.JsonNumber(value);
     }
 
     private Pair<Ast.JsonString, Ast.JsonValue> parsePair() {
         var key = parseString();
-        tokenizer.moveNext();
-        if(tokenizer.current().type != Token.Type.COLON) {
-            throw new parser.ParseException("expected: `:`, actual: " + tokenizer.current().value);
+        moveNext();
+        if(current().type != Token.Type.COLON) {
+            throw new parser.ParseException("expected: `:`, actual: " + current().value);
         }
-        tokenizer.moveNext();
+        moveNext();
         var value = parseValue();
         return new Pair<>(key, value);
     }
 
     private Ast.JsonObject parseObject() {
-        if(tokenizer.current().type != Token.Type.LBRACE) {
-            throw new parser.ParseException("expected `{`, actual: " + tokenizer.current().value);
+        if(current().type != Token.Type.LBRACE) {
+            throw new parser.ParseException("expected `{`, actual: " + current().value);
         }
 
-        tokenizer.moveNext();
-        if(tokenizer.current().type == Token.Type.RBRACE) {
+        moveNext();
+        if(current().type == Token.Type.RBRACE) {
             return new Ast.JsonObject(new ArrayList<>());
         }
 
@@ -89,14 +108,14 @@ public class SimpleJsonParser implements JsonParser {
         var pair= parsePair();
         members.add(pair);
 
-        while(tokenizer.moveNext()) {
-            if(tokenizer.current().type == Token.Type.RBRACE) {
+        while(moveNext()) {
+            if(current().type == Token.Type.RBRACE) {
                 return new Ast.JsonObject(members);
             }
-            if(tokenizer.current().type != Token.Type.COMMA) {
-                throw new parser.ParseException("expected: `,`, actual: " + tokenizer.current().value);
+            if(current().type != Token.Type.COMMA) {
+                throw new parser.ParseException("expected: `,`, actual: " + current().value);
             }
-            tokenizer.moveNext();
+            moveNext();
             pair = parsePair();
             members.add(pair);
         }
@@ -105,12 +124,12 @@ public class SimpleJsonParser implements JsonParser {
     }
 
     private Ast.JsonArray parseArray() {
-        if(tokenizer.current().type != Token.Type.LBRACKET) {
-            throw new parser.ParseException("expected: `[`, actual: " + tokenizer.current().value);
+        if(current().type != Token.Type.LBRACKET) {
+            throw new parser.ParseException("expected: `[`, actual: " + current().value);
         }
 
-        tokenizer.moveNext();
-        if(tokenizer.current().type == Token.Type.RBRACKET) {
+        moveNext();
+        if(current().type == Token.Type.RBRACKET) {
             return new Ast.JsonArray(new ArrayList<>());
         }
 
@@ -118,14 +137,14 @@ public class SimpleJsonParser implements JsonParser {
         var value = parseValue();
         values.add(value);
 
-        while(tokenizer.moveNext()) {
-            if(tokenizer.current().type == Token.Type.RBRACKET) {
+        while(moveNext()) {
+            if(current().type == Token.Type.RBRACKET) {
                 return new Ast.JsonArray(values);
             }
-            if(tokenizer.current().type != Token.Type.COMMA) {
-                throw new parser.ParseException("expected: `,`, actual: " + tokenizer.current().value);
+            if(current().type != Token.Type.COMMA) {
+                throw new parser.ParseException("expected: `,`, actual: " + current().value);
             }
-            tokenizer.moveNext();
+            moveNext();
             value = parseValue();
             values.add(value);
         }

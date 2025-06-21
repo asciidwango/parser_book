@@ -127,33 +127,39 @@ false
 
 前の節でJSONの概要について説明し終わったところで、いよいよJSONの文法について見ていきます。JSONの文法はECMA-404の仕様書に記載されていますが、ここでは、それを若干変形したBNFで表現されたJSONの文法を見ていきます。
 
-JSONのBNFによる定義を簡略化したものは以下で全てです。特に小数点以下の部分は煩雑になる割に本質的でないので削除しました。
+JSONのBNFによる定義を簡略化したものは以下で全てです。特に小数点以下の部分は煩雑になる割に本質的でないので削除しました。また、文字列のエスケープシーケンス（`\n`、`\t`、`\"`など）も本章では扱いません。これらは構文解析の本質を理解する上では必須ではないためです。
 
 ```text
-json = ws value ws;
+json = ws value;
 object = LBRACE RBRACE | LBRACE pair {COMMA pair} RBRACE;
-pair = STRING COLON value;
+pair = string COLON value;
 array = LBRACKET RBRACKET | LBRACKET value {COMMA value} RBRACKET ;
 value = true | false | null | object | array | number | string;
-string = ("\"\"" | "\"" CHAR+ "\"") ws;
+string = ('""' | '"' {CHAR} '"') ws;
 number = INT ws;
-true = "true" ws;
-false = "false" ws;
-null = "null" ws;
+true = 'true' ws;
+false = 'false' ws;
+null = 'null' ws;
 
-COMMA = "," ws;
-COLON = ":" ws;
-LBRACE = "{" ws;
-RBRACE = "}" ws;
-LBRACKET = "[" ws;
-RBRACKET = "]" ws;
+COMMA = ',' ws;
+COLON = ':' ws;
+LBRACE = '{' ws;
+RBRACE = '}' ws;
+LBRACKET = '[' ws;
+RBRACKET = ']' ws;
 
-ws = (" " | "\\t" | "\\n" | "\\r")* ;
-CHAR = any character except " and backslash // "またはバックスラッシュ以外の文字
-     | "\\" ("\"" | "\\" | "/" | "b" | "f" | "n" | "r" | "t") // エスケープ文字
-     | "\\" "u" HEX HEX HEX HEX ; // Unicode escape sequence (uXXXX) の形式
-HEX = hexadecimal digit (0-9, a-f, A-F);
-INT = optional minus sign ('0' | (digit 1-9 {digit 0-9})) ; // 0 または 1-9で始まる数字列
+ws = {' ' | '\t' | '\n' | '\r'} ;
+CHAR = 'a' | 'b' | 'c' | 'd' | 'e' | 'f' | 'g' | 'h' | 'i' | 'j' | 'k' | 'l' | 'm' |
+       'n' | 'o' | 'p' | 'q' | 'r' | 's' | 't' | 'u' | 'v' | 'w' | 'x' | 'y' | 'z' |
+       'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J' | 'K' | 'L' | 'M' |
+       'N' | 'O' | 'P' | 'Q' | 'R' | 'S' | 'T' | 'U' | 'V' | 'W' | 'X' | 'Y' | 'Z' |
+       '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' |
+       ' ' | '!' | '#' | '$' | '%' | '&' | '\'' | '(' | ')' | '*' | '+' | ',' |
+       '-' | '.' | '/' | ':' | ';' | '<' | '=' | '>' | '?' | '@' | '[' | ']' |
+       '^' | '_' | '`' | '{' | '|' | '}' | '~' ;
+INT = ['-'] ('0' | (NONZERO {DIGIT})) ;
+DIGIT = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' ;
+NONZERO = '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' ;
 ```
 
 これまで説明したJSONの要素と比較して見慣れない記号が出てきましたが、一つ一つ見て行きましょう。
@@ -163,12 +169,12 @@ INT = optional minus sign ('0' | (digit 1-9 {digit 0-9})) ; // 0 または 1-9�
 一番上から読んでいきます。2章の復習になりますが、BNFでは、
 
  ```
-json = ws value ws;
+json = ws value;
  ```
  
-のような**規則**の集まりによって、文法を表現します。`=`の左側である`json`が**規則名**で、右側（ここでは `ws value ws`）が**本体**になります。さらに、本体の中に出てくる、他の規則を参照する部分（ここでは`value`や`ws`)を非終端記号と呼びます。非終端記号は同じBNFで定義されている規則名と一致する必要があります。
+のような**規則**の集まりによって、文法を表現します。`=`の左側である`json`が**規則名**で、右側（ここでは `ws value`）が**本体**になります。さらに、本体の中に出てくる、他の規則を参照する部分（ここでは`value`や`ws`)を非終端記号と呼びます。非終端記号は同じBNFで定義されている規則名と一致する必要があります。
   
-この規則を日本語で表現すると、「`json`という名前の規則は、`ws`の後に`value`が続き、その後`ws`になる」と読むことができます。`value`は、JSONの値を表しているので、jsonという規則は`ws`（空白文字）で囲まれたJSONの値を表しています。
+この規則を日本語で表現すると、「`json`という名前の規則は、`ws`の後に`value`が続く」と読むことができます。`value`は、JSONの値を表しているので、jsonという規則は`ws`（空白文字）の後にJSONの値が続くものを表しています。
 
 ### object
 
@@ -340,7 +346,7 @@ number = INT ws;
 string = ("\"\"" | "\"" CHAR+ "\"") ws;
 ```
 
-`"`で始まって、`CHAR`で定義される文字が0個以上続いて、 `"` で終わります。`CHAR`の定義はBNF中に含まれており、エスケープシーケンスなどもここで定義されています。
+`"`で始まって、`CHAR`で定義される文字が0個以上続いて、 `"` で終わります。`CHAR`の定義はBNF中に含まれており、ダブルクォーテーションとバックスラッシュを除く印字可能文字を表しています。なお、本章ではエスケープシーケンスは扱わないため、バックスラッシュを含む文字列は処理できません。
 
 ### JSONのBNFまとめ
 
@@ -356,24 +362,15 @@ JSONのBNFは、非常に少数の規則だけで表現することができま�
 
 再帰的な規則は、構文解析において非常に重要な要素なので、これから本書を読み進める上でも念頭に置いてください。
 
-## JSONの構文解析器
+## JSONの抽象構文木
 
-JSONの定義と、文法について見てきました。この節では、BNFを元に、JSONのデータを**構文解析**するプログラムを考えてみます。とりあえずは、以下のようなインタフェース`JsonParser`インタフェースを実装したクラスを「JSONの構文解析器」と考えることにします。
+JSONの定義と、文法について見てきました。構文解析器を実装する前に、まずJSONの抽象構文木（AST: Abstract Syntax Tree）をJavaでどのように表現するかを定義しましょう。
 
-```java
-package parser;
-interface JsonParser {
-    public ParseResult<JsonAst.JsonValue> parse(String input);
-}
-```
+抽象構文木は、2章でも説明したとおり、プログラムの構造を表現するためのデータ構造です。重要な点は、抽象構文木では元の文字列に含まれていた「構文上のノイズ」が取り除かれることです。例えば：
 
-クラス`ParseResult<T>`は以下のようなジェネリックなクラスになっています。`value`は解析結果の値です。これは任意の型をとり得るので、`T`としています。また、`input`は「構文解析の対象となる文字列」を表します。
-
-```java
-public record ParseResult<T>(T value, String input) {}
-```
-
-インタフェース`JsonParser`は`parse()`メソッドだけを持ちます。`parse()`メソッドは、文字列`input`を受け取り、`ParseResult<JsonAst.JsonValue>`型を返します。
+- 空白文字（`ws`）は抽象構文木には含まれません
+- カンマ（`,`）やコロン（`:`）などの区切り文字も、構造として表現されるため個別のノードにはなりません
+- 括弧（`{}`、`[]`）も同様に、オブジェクトや配列という構造で表現されます
 
 以下の`JsonAst`の定義を見ると、JSONの各要素をJavaのクラスとして表現していることがわかります。これは、JSONという「文字列」を、Javaのオブジェクトという「構造化されたデータ」に変換するための定義です。
 
@@ -445,11 +442,44 @@ public interface JsonAst {
 }
 ```
 
-各クラスがBNFの規則名に対応しているのがわかるでしょうか。次の節では、各規則に対応するメソッドを実装することを通して、実際にJSONの構文解析器を組み上げていきます。
+各クラスがBNFの規則名に対応しているのがわかるでしょうか。ただし、前述のとおり、`ws`や区切り文字（`,`、`:`）などは抽象構文木には現れません。これらは構文解析の過程で消費されますが、最終的なデータ構造には含まれないのです。
+
+## JSONの構文解析器
+
+この節では、BNFを元に、JSONのデータを**構文解析**するプログラムを実装していきます。以下のようなインタフェース`JsonParser`インタフェースを実装したクラスを「JSONの構文解析器」と考えることにします。
+
+```java
+package parser;
+interface JsonParser {
+    public ParseResult<JsonAst.JsonValue> parse(String input);
+}
+```
+
+クラス`ParseResult<T>`は以下のようなジェネリックなクラスになっています。`value`は解析結果の値です。これは任意の型をとり得るので、`T`としています。また、`input`は「構文解析の対象となる文字列」を表します。
+
+```java
+public record ParseResult<T>(T value, String input) {}
+```
+
+インタフェース`JsonParser`は`parse()`メソッドだけを持ちます。`parse()`メソッドは、文字列`input`を受け取り、`ParseResult<JsonAst.JsonValue>`型を返します。
+
+### 構文解析の戦略
+
+実装に入る前に、これから作るJSONパーサーの解析戦略について説明しておきます。
+
+1. トップダウン解析: BNFの規則を上から順番に適用していく方式を採用します。例えば、`value`規則から始めて、それぞれの選択肢を試していきます。
+
+2. バックトラック: 解析に失敗した場合、前の状態に戻って別の選択肢を試します。これにより、複数の可能性がある場合でも正しい解析結果を見つけることができます。
+
+3. 順序付き選択（Ordered Choice）: BNFの `|` で区切られた選択肢を、左から右へ順番に試します。例えば、`value = true | false | null | number | string | object | array` の場合、まず`true`を試し、失敗したら`false`を試す、という具合です。この順序は重要で、より具体的なパターンを先に配置することで、正しい解析を保証します。実装の`parseValue()`メソッドでも、BNFの定義順序と同じ順番で各選択肢を試すようにしています。
+
+4. 例外による失敗の表現: 構文解析の失敗は、`ParseException`という例外で表現します。これにより、深くネストした解析処理から簡潔に失敗を伝播させることができます。
+
+なお、クラス名を`PegJsonParser`としているのは、この実装が後の章で説明するPEG（Parsing Expression Grammar）の考え方に基づいているためです。PEGは順序付き選択とバックトラックを特徴とする文法形式で、本実装もこれらの特徴を持っています。
 
 ### 構文解析器の全体像
 
-これから、JSONの構文解析器、つまり、JSONを表す文字列を受け取って、それに対応する上記の`JsonAst.JsonValue`型の値を返すメソッドを実装していくわけですが、先に構文解析器を表現するクラスの全体像を示しておきます。
+それでは、JSONの構文解析器の実装を見ていきましょう。
 
 ```java
 package parser;
@@ -461,9 +491,6 @@ public class PegJsonParser implements JsonParser {
     private int cursor;
     private String input;
 
-    private int progressiveCursor;
-    private ParseException progressiveException;
-
     private static class ParseException extends RuntimeException {
         public ParseException(String message) {
             super(message);
@@ -473,12 +500,8 @@ public class PegJsonParser implements JsonParser {
     public ParseResult<JsonAst.JsonValue> parse(String input) {
         this.input = input;
         this.cursor = 0;
-        try {
-            var value = parseValue();
-            return new ParseResult<>(value, input.substring(this.cursor));
-        } catch (ParseException e) {
-            throw progressiveException;
-        }
+        var value = parseValue();
+        return new ParseResult<>(value, input.substring(this.cursor));
     }
 
     private void recognize(String literal) {
@@ -487,13 +510,10 @@ public class PegJsonParser implements JsonParser {
         } else {
             String substring = input.substring(cursor);
             int endIndex = cursor + (literal.length() > substring.length() ? substring.length() : literal.length());
-            throwParseException("expected: " + literal + ", actual: " + input.substring(cursor, endIndex));
+            throw new ParseException("expected: " + literal + ", actual: " + input.substring(cursor, endIndex));
         }
     }
 
-    private boolean isHexChar(char ch) {
-        return ('0' <= ch && ch <= '9') || ('a' <= ch && ch <= 'f') || ('A' <= ch && ch <= 'F');
-    }
 
     private void skipWhitespace() {
         OUTER:
@@ -516,13 +536,31 @@ public class PegJsonParser implements JsonParser {
     private JsonAst.JsonValue parseValue() {
         int backup = cursor;
         try {
-            return parseString();
+            return parseTrue();
+        } catch (ParseException e) {
+            cursor = backup;
+        }
+
+        try {
+            return parseFalse();
+        } catch (ParseException e) {
+            cursor = backup;
+        }
+
+        try {
+            return parseNull();
         } catch (ParseException e) {
             cursor = backup;
         }
 
         try {
             return parseNumber();
+        } catch (ParseException e) {
+            cursor = backup;
+        }
+
+        try {
+            return parseString();
         } catch (ParseException e) {
             cursor = backup;
         }
@@ -535,18 +573,6 @@ public class PegJsonParser implements JsonParser {
 
         try {
             return parseArray();
-        } catch (ParseException e) {
-            cursor = backup;
-        }
-
-        try {
-            return parseTrue();
-        } catch (ParseException e) {
-            cursor = backup;
-        }
-
-        try {
-            return parseFalse();
         } catch (ParseException e) {
             cursor = backup;
         }
@@ -604,11 +630,11 @@ public class PegJsonParser implements JsonParser {
 
     private JsonAst.JsonString parseString() {
         if(cursor >= input.length()) {
-            throwParseException("expected: \"" + " actual: EOF");
+            throw new ParseException("expected: \"" + " actual: EOF");
         }
         char ch = input.charAt(cursor);
         if(ch != '"') {
-            throwParseException("expected: \"" + "actual: " + ch);
+            throw new ParseException("expected: \"" + "actual: " + ch);
         }
         cursor++;
         var builder = new StringBuilder();
@@ -617,64 +643,9 @@ public class PegJsonParser implements JsonParser {
             ch = input.charAt(cursor);
             switch(ch) {
                 case '\\':
-                    cursor++;
-                    if(cursor >= input.length()) break OUTER;
-                    char nextCh = input.charAt(cursor);
-                    cursor++;
-                    switch (nextCh) {
-                        case 'b':
-                            builder.append('\b');
-                            break;
-                        case 'f':
-                            builder.append('\f');
-                            break;
-                        case 'n':
-                            builder.append('\n');
-                            break;
-                        case 'r':
-                            builder.append('\r');
-                            break;
-                        case 't':
-                            builder.append('\t');
-                            break;
-                        case '\\':
-                            builder.append('\\');
-                            break;
-                        case '"':
-                            builder.append('"');
-                            break;
-                        case '/':
-                            builder.append('/');
-                            break;
-                        case 'u':
-                            if(cursor + 4 <= input.length()) {
-                                char[] chars = input.substring(
-                                    cursor, cursor + 4).toCharArray();
-                                for(char c:chars) {
-                                    if(!isHexChar(c)) {
-                                        throwParseException(
-                                            "invalid unicode escape: " + c
-                                        );
-                                    }
-                                }
-                                char result = (char)Integer.parseInt(
-                                    new String(chars), 16
-                                );
-                                builder.append(result);
-                                cursor += 4;
-                            } else {
-                                throwParseException(
-                                    "invalid unicode escape: " + 
-                                        input.substring(cursor)
-                                );
-                            }
-                            break;
-                        default:
-                            throwParseException(
-                                "expected: b|f|n|r|t|\"|\\|/ actual: " + 
-                                    nextCh
-                            );
-                    }
+                    throw new ParseException(
+                        "escape sequences are not supported in this parser"
+                    );
                     break;
                 case '"':
                     cursor++;
@@ -687,7 +658,7 @@ public class PegJsonParser implements JsonParser {
         }
 
         if(ch != '"') {
-            throwParseException("expected: " + "\"" + " actual: " + ch);
+            throw new ParseException("expected: " + "\"" + " actual: " + ch);
         } else {
             skipWhitespace();
             return new JsonAst.JsonString(builder.toString());
@@ -695,14 +666,6 @@ public class PegJsonParser implements JsonParser {
         throw new RuntimeException("never reach here");
     }
 
-    private void throwParseException(String message) throws ParseException {
-        var exception = new ParseException(message);
-        if(progressiveCursor < cursor) {
-            progressiveCursor = cursor;
-            progressiveException = exception;
-        }
-        throw exception;
-    }
 
     private JsonAst.JsonNumber parseNumber() {
         int start = cursor;
@@ -713,7 +676,7 @@ public class PegJsonParser implements JsonParser {
             cursor++;
         }
         if(start == cursor) {
-            throwParseException("expected: [0-9] actual: " + (ch != 0 ? ch : "EOF"));
+            throw new ParseException("expected: [0-9] actual: " + (ch != 0 ? ch : "EOF"));
         }
         return new JsonAst.JsonNumber(
             Integer.parseInt(input.substring(start, cursor))
@@ -769,12 +732,14 @@ public class PegJsonParser implements JsonParser {
         var value = parseValue();
         values.add(value);
         try {
+            backup = cursor;
             while (true) {
                 parseComma();
                 value = parseValue();
                 values.add(value);
             }
         } catch (ParseException e) {
+            cursor = backup;
             parseRBracket();
             return new JsonAst.JsonArray(values);
         }
@@ -788,19 +753,13 @@ public class PegJsonParser implements JsonParser {
 public class PegJsonParser implements JsonParser {
     private int cursor;
     private String input;
-    private int progressiveCursor;
-    private ParseException progressiveException;
     // ...
 }
 ```
 
 構文解析器を実装する方法としては、同じ入力文字列を与えれば同じ解析結果が返ってくるような関数型の実装方法と、今回のように、現在どこまで読み進めたかによって解析結果が変わる手続き型の方法があるのですが、手続き型の方が説明しやすいので、本書では手続き型の実装方法を採用しています。
 
-`progressiveCursor` と `progressiveException` フィールドは、よりわかりやすいエラーメッセージを提供するためのものです。
-
-たとえば、`{"key": tru}` という不正なJSONがあった場合を考えてみましょう。`parseValue` メソッドは、最初に文字列かどうか試し、次に数値かどうか試し、…と順番に試していきます。最終的に`parseTrue`を試したとき、"tru"まで読んで"true"の"e"が見つからないことがわかります。
-
-このとき、「"tru"の後に"e"が来るべきだった」という、最も詳しいエラー情報をユーザーに伝えることができます。もしこの仕組みがなければ、「最初の文字列のチェックで失敗した」という、あまり役に立たないエラーメッセージになってしまいます。
+`cursor`フィールドは現在の読み取り位置を、`input`フィールドは解析対象の文字列を保持します。エラーが発生した場合は`ParseException`を投げることで、どこでどのような問題が発生したかを呼び出し元に伝えます。
 
 また、`parseValue()` メソッド内の実装に注目してください。
 
@@ -808,28 +767,27 @@ public class PegJsonParser implements JsonParser {
     private JsonAst.JsonValue parseValue() {
         int backup = cursor;
         try {
-            return parseString();
+            return parseTrue();
         } catch (ParseException e) {
             cursor = backup;
         }
 
         try {
-            return parseNumber();
+            return parseFalse();
         } catch (ParseException e) {
             cursor = backup;
         }
-        // parseObject(), parseArray(), parseTrue(), parseFalse(),
-        // parseNull() と続く...
-        return parseNull();
+        // parseNull(), parseNumber(), parseString(), 
+        // parseObject(), parseArray() と続く...
     }
 ```
 
-`parseValue()`の実装は、BNFの`value = string | number | object | array | true | false | null;`という定義に対応しています。
+`parseValue()`の実装は、BNFの`value = true | false | null | number | string | object | array`という定義に対応しています。
 
-`|`は「または」を意味するので、「valueは、stringまたはnumberまたはobjectまたは...」という意味になります。このコードでは、それぞれの可能性を順番に試していきます。
+`|`は「または」を意味するので、「valueは、trueまたはfalseまたはnullまたは...」という意味になります。このコードでは、それぞれの可能性を順番に試していきます。
 
-1. まず`parseString()`を試し、失敗したらカーソルを元に戻す
-2. 次に`parseNumber()`を試し、失敗したらカーソルを元に戻す
+1. まず`parseTrue()`を試し、失敗したらカーソルを元に戻す
+2. 次に`parseFalse()`を試し、失敗したらカーソルを元に戻す
 3. 以下同様に続く...
 
 このように、失敗したら元の位置に戻って別の可能性を試すことを「バックトラック」と呼びます。
@@ -871,7 +829,7 @@ private JsonAst.JsonTrue parseTrue() {
 
 ### falseの構文解析メソッド
 
-`false`の構文解析は、次のシグニチャを持つ `parseFalse()` メソッドとして定義します。
+`false`の構文解析は、次のような `parseFalse()` メソッドとして定義します。
 
 ```java
 private JsonAst.JsonFalse parseFalse() {
@@ -885,7 +843,7 @@ private JsonAst.JsonFalse parseFalse() {
 
 ### 数値の構文解析メソッド
 
-数値の構文解析は、次のシグニチャを持つ `parseNumber()` メソッドとして定義します。
+数値の構文解析は、次のような `parseNumber()` メソッドとして定義します。
 
 ```java
     private JsonAst.JsonNumber parseNumber() {
@@ -912,25 +870,21 @@ private JsonAst.JsonFalse parseFalse() {
                 }
             } else {
                 // 数字で始まらない場合はエラー
-                throwParseException(
+                throw new ParseException(
                     "expected: digit actual: " + 
                     (cursor < input.length() ? input.charAt(cursor) : "EOF")
                 );
             }
         } else {
-             throwParseException("expected: digit actual: EOF");
+             throw new ParseException("expected: digit actual: EOF");
         }
 
-        if (digitsStart == cursor && 
-          !(input.charAt(digitsStart-1) == '0' && 
-          (digitsStart > start && input.charAt(start) == '-'))) {
-             // "0"単体または"-0"はOKだが、"-"のみや、"-A"などはだめ
-             if(digitsStart > start && input.charAt(start) == '-'){ // "-" のみのケース
-                 throwParseException(
-                    "expected: digit after '-' actual: " + 
-                    (cursor < input.length() ? input.charAt(cursor) : "EOF")
-                 );
-             }
+        if (digitsStart == cursor) {
+             // 数字が一つも読まれなかった場合（"-"のみなど）
+             throw new ParseException(
+                "expected: digit after '-' actual: " + 
+                (cursor < input.length() ? input.charAt(cursor) : "EOF")
+             );
         }
         
         String numberStr = input.substring(start, cursor);
@@ -939,10 +893,9 @@ private JsonAst.JsonFalse parseFalse() {
             skipWhitespace();
             return new JsonAst.JsonNumber(value);
         } catch (NumberFormatException e) {
-            throwParseException("invalid number format: " + numberStr);
+            throw new ParseException("invalid number format: " + numberStr);
+            return null; // unreachable
         }
-        // Unreachable, but to satisfy compiler
-        return null;
     }
 ```
 
@@ -950,16 +903,16 @@ private JsonAst.JsonFalse parseFalse() {
 
 ### 文字列の構文解析メソッド
 
-文字列の構文解析は、次のシグニチャを持つ `parseString()` メソッドとして定義します。
+文字列の構文解析は、次のような `parseString()` メソッドとして定義します。
 
 ```java
     private JsonAst.JsonString parseString() {
         if(cursor >= input.length()) {
-            throwParseException("expected: \"" + " actual: EOF");
+            throw new ParseException("expected: \"" + " actual: EOF");
         }
         char ch = input.charAt(cursor);
         if(ch != '"') {
-            throwParseException("expected: \"" + "actual: " + ch);
+            throw new ParseException("expected: \"" + "actual: " + ch);
         }
         cursor++;
         var builder = new StringBuilder();
@@ -968,65 +921,9 @@ private JsonAst.JsonFalse parseFalse() {
             ch = input.charAt(cursor);
             switch(ch) {
                 case '\\':
-                    cursor++;
-                    if(cursor >= input.length()) break OUTER;
-                    char nextCh = input.charAt(cursor);
-                    cursor++;
-                    switch (nextCh) {
-                        case 'b':
-                            builder.append('\b');
-                            break;
-                        case 'f':
-                            builder.append('\f');
-                            break;
-                        case 'n':
-                            builder.append('\n');
-                            break;
-                        case 'r':
-                            builder.append('\r');
-                            break;
-                        case 't':
-                            builder.append('\t');
-                            break;
-                        case '\\':
-                            builder.append('\\');
-                            break;
-                        case '"':
-                            builder.append('"');
-                            break;
-                        case '/':
-                            builder.append('/');
-                            break;
-                        case 'u':
-                            if(cursor + 4 <= input.length()) {
-                                char[] chars = input.substring(
-                                    cursor, cursor + 4
-                                ).toCharArray();
-                                for(char c:chars) {
-                                    if(!isHexChar(c)) {
-                                        throwParseException(
-                                            "invalid unicode escape: " + c
-                                        );
-                                    }
-                                }
-                                char result = (char)Integer.parseInt(
-                                    new String(chars), 16
-                                );
-                                builder.append(result);
-                                cursor += 4;
-                            } else {
-                                throwParseException(
-                                    "invalid unicode escape: " + 
-                                    input.substring(cursor)
-                                );
-                            }
-                            break;
-                        default:
-                            throwParseException(
-                                "expected: b|f|n|r|t|\"|\\|/ actual: " + 
-                                nextCh
-                            );
-                    }
+                    throw new ParseException(
+                        "escape sequences are not supported in this parser"
+                    );
                     break;
                 case '"':
                     cursor++;
@@ -1039,12 +936,12 @@ private JsonAst.JsonFalse parseFalse() {
         }
 
         if(ch != '"') {
-            throwParseException("expected: " + "\"" + " actual: " + ch);
+            throw new ParseException("expected: " + "\"" + " actual: " + ch);
+            return null; // unreachable
         } else {
             skipWhitespace();
             return new JsonAst.JsonString(builder.toString());
         }
-        throw new RuntimeException("never reach here");
     }
 ```
 
@@ -1054,11 +951,11 @@ private JsonAst.JsonFalse parseFalse() {
 
 ```java
         if(cursor >= input.length()) {
-            throwParseException("expected: \"" + " actual: EOF");
+            throw new ParseException("expected: \"" + " actual: EOF");
         }
         char ch = input.charAt(cursor);
         if(ch != '"') {
-            throwParseException("expected: \"" + "actual: " + ch);
+            throw new ParseException("expected: \"" + "actual: " + ch);
         }
         cursor++;
 ```
@@ -1068,30 +965,13 @@ private JsonAst.JsonFalse parseFalse() {
 
 をチェックしています。文字列は当然ながら、ダブルクォートで始まりますし、文字列リテラルは、最低長さが2あるので、それらの条件が満たされなければ例外が投げられるわけです。
 
-`while`文の中では、最初が
-
-- `\` であるか（エスケープシーケンスか）
-- それ以外か
-
-を`switch`文で判定して分岐しています。JSONで使えるエスケープシーケンスは、ECMA-404仕様で以下のように定義されています。
-
-- `\"` (ダブルクォート)
-- `\\` (バックスラッシュ)
-- `\/` (スラッシュ)
-- `\b` (バックスペース)
-- `\f` (フォームフィード)
-- `\n` (ラインフィード)
-- `\r` (キャリッジリターン)
-- `\t` (水平タブ)
-- `\uXXXX` (4桁の16進数で表されるUnicode文字。サロゲートペアを表現する場合は `\uHHHH\uLLLL` のように2つのシーケンスを記述します)
-
-`parseString` メソッド内の `switch` 文はこれらのエスケープシーケンスを処理しています。
+`while`文の中では、各文字を読み込んで文字列を構築していきます。switch文の中で最も重要なのは`default`ケースで、ここで通常の文字を`StringBuilder`に追加して文字列を構築しています。ダブルクォート（`"`）が現れたら文字列の終端として処理し、バックスラッシュ（`\`）が現れた場合はエラーとして処理します。本章ではエスケープシーケンスを扱わないため、実際のJSONパーサーではエスケープシーケンスの処理が必要ですが、構文解析の本質を理解する上では必須ではないため、ここでは省略しています。
 
 `while`文が終わったあとで、
 
 ```java
         if(ch != '"') {
-            throwParseException("expected: " + "\"" + " actual: " + ch);
+            throw new ParseException("expected: " + "\"" + " actual: " + ch);
         } else {
             skipWhitespace();
             return new JsonAst.JsonString(builder.toString());
@@ -1101,11 +981,10 @@ private JsonAst.JsonFalse parseFalse() {
 
 というチェックを入れることによって、ダブルクォートで文字列が終端している事を確認した後、空白を読み飛ばしています。
 
-メソッドの末尾で`RuntimeException`を`throw`しているのは、ここに到達することは、構文解析器にバグが無い限りはありえないことを示しています。
 
 ### 配列の構文解析メソッド
 
-配列の構文解析は、次のシグニチャを持つ `parseArray()` メソッドとして定義します。
+配列の構文解析は、次のような `parseArray()` メソッドとして定義します。
 
 ```java
     public JsonAst.JsonArray parseArray() {
@@ -1163,7 +1042,7 @@ parseLBracket();
             int endIndex = cursor + 
                 (literal.length() > substring.length() ? 
                 substring.length() : literal.length());
-            throwParseException(
+            throw new ParseException(
                 "expected: " + literal + 
                 ", actual: " + input.substring(cursor, endIndex)
             );
@@ -1224,7 +1103,7 @@ array = LBRACKET RBRACKET | LBRACKET {value {COMMA value}} RBRACKET ;
 
 ### オブジェクトの構文解析メソッド
 
-オブジェクトの構文解析は、次のシグニチャを持つ `parseObject()` メソッドとして定義します。
+オブジェクトの構文解析は、次のような `parseObject()` メソッドとして定義します。
 
 ```java
     private JsonAst.JsonObject parseObject() {
@@ -1243,12 +1122,14 @@ array = LBRACKET RBRACKET | LBRACKET {value {COMMA value}} RBRACKET ;
         var member = parsePair();
         members.add(member);
         try {
+            backup = cursor;
             while (true) {
                 parseComma();
                 member = parsePair();
                 members.add(member);
             }
         } catch (ParseException e) {
+            cursor = backup;
             parseRBrace();
             return new JsonAst.JsonObject(members);
         }
@@ -1344,54 +1225,52 @@ We are parsers.
 
 この点はトレードオフがあって、たとえば、空白に関する規則がある言語の中でブレがある場合には、字句解析という前処理はかえってしない方が良いということすらあります。ともあれ、字句解析という前処理を通すことには一定のメリットがあるのは確かです。
 
-以下では字句解析器を使った構文解析器の全体像を示します。まず最初に、JSONの字句解析器は次のようになります。
+以下では字句解析器を使った構文解析器の全体像を示します。ここでは、コアとなるアイデアに絞って説明します。完全なソースコードは巻末の付録を参照してください。
+
+まず、JSONの字句解析器（トークナイザー）の基本構造は次のようになります。
 
 ```java
-package parser;
-
 public class SimpleJsonTokenizer implements JsonTokenizer {
     private final String input;
     private int index;
-    private Token fetched;
 
-    public SimpleJsonTokenizer(String input) {
-        this.input = input;
-        this.index = 0;
-    }
-
-    public String rest() {
-        return input.substring(index);
-    }
-
-    private static boolean isDigit(char ch) {
-        return '0' <= ch && ch <= '9';
-    }
-
-    private boolean tokenizeNumber(boolean positive) {
-        char firstChar = input.charAt(index);
-        if(!isDigit(firstChar)) return false;
-        int result = 0;
-        while(index < input.length()) {
-            char ch = input.charAt(index);
-            if(!isDigit(ch)) {
-                fetched = new Token(
-                    Token.Type.INTEGER, positive ? result : -result
-                );
-                return true;
-            }
-            result = result * 10 + (ch - '0');
-            index++;
+    // すべての入力を一度にトークン化
+    public List<Token> tokenizeAll() {
+        List<Token> tokens = new ArrayList<>();
+        while (moveNext()) {
+            tokens.add(current());
         }
-        fetched = new Token(Token.Type.INTEGER, positive ? result : -result);
-        return true;
+        tokens.add(new Token(Token.Type.EOF, null));
+        return tokens;
     }
 
+    // 次のトークンを読み取る
+    public boolean moveNext() {
+        skipWhitespace();
+        
+        if (index >= input.length()) {
+            return false;
+        }
+        
+        char ch = input.charAt(index);
+        switch (ch) {
+            case '"':
+                return tokenizeStringLiteral();
+            case '{':
+                accept("{", Token.Type.LBRACE, "{");
+                return true;
+            case '[':
+                accept("[", Token.Type.LBRACKET, "[");
+                return true;
+            // 他のトークンも同様に処理...
+        }
+    }
+    
+    // 文字列トークンの読み取り（エスケープシーケンスも対応）
     private boolean tokenizeStringLiteral() {
-        char firstChar = input.charAt(index);
-        int beginIndex = index;
-        if(firstChar != '"') return false;
+        if(input.charAt(index) != '"') return false;
         index++;
-        var builder = new StringBuffer();
+        var builder = new StringBuilder();
         while(index < input.length()) {
             char ch = input.charAt(index);
             if(ch == '"') {
@@ -1399,301 +1278,74 @@ public class SimpleJsonTokenizer implements JsonTokenizer {
                 index++;
                 return true;
             }
-            if(ch == '\\') {
-                index++;
-                if(index >= input.length()) return false;
-                char nextCh = input.charAt(index);
-                switch(nextCh) {
-                    case '\\':
-                        builder.append('\\');
-                        break;
-                    case '"':
-                        builder.append('"');
-                        break;
-                    case '/':
-                        builder.append('/');
-                        break;
-                    case 't':
-                        builder.append('\t');
-                        break;
-                    case 'f':
-                        builder.append('\f');
-                        break;
-                    case 'b':
-                        builder.append('\b');
-                        break;
-                    case 'r':
-                        builder.append('\r');
-                        break;
-                    case 'n':
-                        builder.append('\n');
-                        break;
-                    case 'u':
-                        // \u の後に4文字の16進数が必要
-                        if(index + 4 >= input.length()) { 
-                            // index は 'u' の次の文字を指している
-                            throw new TokenizerException(
-                                "unicode escape sequence is too short: " + 
-                                input.substring(index -1)
-                            );
-                        }
-                        // 'u'の次の文字から4文字取得
-                        var unicodeEscape = input.substring(index, index + 4); 
-                        if(!unicodeEscape.matches("[0-9a-fA-F]{4}")) {
-                            throw new TokenizerException(
-                                "illegal unicode escape sequence: \\u" + unicodeEscape
-                            );
-                        }
-                        builder.append((char)Integer.parseInt(unicodeEscape, 16));
-                        index += 4; // 4文字消費
-                        break;
-                }
-            } else {
-                builder.append(ch);
-            }
+            // エスケープシーケンスの処理も含む
+            builder.append(ch);
             index++;
-        }
-        return false; // 閉じの " が見つからなかった場合
-    }
-
-    private void accept(String literal, Token.Type type, Object value) {
-        String head = input.substring(index);
-        if(head.indexOf(literal) == 0) {
-            fetched = new Token(type, value);
-            index += literal.length();
-        } else {
-            throw new TokenizerException(
-                "expected: " + literal + ", actual: " + head
-            );
-        }
-    }
-
-    @Override
-    public Token current() {
-        return fetched;
-    }
-
-    @Override
-    public boolean moveNext() {
-        LOOP:
-        while(index < input.length()) {
-            char ch = input.charAt(index);
-            switch (ch) {
-                case '[':
-                    accept("[", Token.Type.LBRACKET, "[");
-                    return true;
-                case ']':
-                    accept("]", Token.Type.RBRACKET, "]");
-                    return true;
-                case '{':
-                    accept("{", Token.Type.LBRACE, "{");
-                    return true;
-                case '}':
-                    accept("}", Token.Type.RBRACE, "}");
-                    return true;
-                case '(':
-                    accept("(", Token.Type.LPAREN, "(");
-                    return true;
-                case ')':
-                    accept(")", Token.Type.RPAREN, ")");
-                    return true;
-                case ',':
-                    accept(",", Token.Type.COMMA, ",");
-                    return true;
-                case ':':
-                    accept(":", Token.Type.COLON, ":");
-                    return true;
-                // true
-                case 't':
-                    accept("true", Token.Type.TRUE, true);
-                    return true;
-                // false
-                case 'f':
-                    accept("false", Token.Type.FALSE, false);
-                    return true;
-                case 'n': {
-                    String actual;
-                    if (index + 4 <= input.length()) {
-                        actual = input.substring(index, index + 4);
-                        if (actual.equals("null")) {
-                            fetched = new Token(Token.Type.NULL, null);
-                            index += 4;
-                            return true;
-                        } else {
-                            throw new TokenizerException(
-                                "expected: null, actual: " + actual
-                            );
-                        }
-                    } else {
-                        actual = input.substring(index);
-                        throw new TokenizerException(
-                            "expected: null, actual: " + actual
-                        );
-                    }
-                }
-                case '"':
-                    return tokenizeStringLiteral();
-                // whitespace (JSON仕様準拠)
-                case ' ':       // Space
-                case '\t':      // Horizontal Tab
-                case '\n':      // Line Feed
-                case '\r':      // Carriage Return
-                    index++; // 現在の空白文字を消費
-                    // 連続する空白を読み飛ばす
-                    while(index < input.length()) {
-                        char nextCh = input.charAt(index);
-                        if (nextCh == ' ' || 
-                            nextCh == '\t' || 
-                            nextCh == '\n' || 
-                            nextCh == '\r') {
-                            index++;
-                        } else {
-                            break;
-                        }
-                    }
-                    continue LOOP;
-                default:
-                    if('0' <= ch && ch <= '9') {
-                        return tokenizeNumber(true);
-                    } else if (ch == '+') {
-                        index++;
-                        return tokenizeNumber(true);
-                    } else if (ch == '-') {
-                        index++;
-                        return tokenizeNumber(false);
-                    } else {
-                        throw new TokenizerException(
-                            "unexpected character: " + ch);
-                    }
-            }
         }
         return false;
     }
 }
 ```
 
-これを利用した構文解析器のコードを示します。
+次に、この字句解析器を使った構文解析器の基本構造を示します。トークナイザーが一度にすべてのトークンを生成し、パーサーはそのトークン列を処理します。
 
 ```java
-package parser;
-
-import java.util.ArrayList;
-import java.util.List;
-
 public class SimpleJsonParser implements JsonParser {
-    private SimpleJsonTokenizer tokenizer;
+    private List<Token> tokens;
+    private int currentIndex;
 
     public ParseResult<JsonAst.JsonValue> parse(String input) {
-        tokenizer = new SimpleJsonTokenizer(input);
-        tokenizer.moveNext();
+        // 入力を一度に完全にトークン化
+        SimpleJsonTokenizer tokenizer = new SimpleJsonTokenizer(input);
+        this.tokens = tokenizer.tokenizeAll();
+        this.currentIndex = 0;
+        
         var value = parseValue();
-        return new ParseResult<>(value, tokenizer.rest());
+        return new ParseResult<>(value, "");
+    }
+    
+    private Token current() {
+        if (currentIndex < tokens.size()) {
+            return tokens.get(currentIndex);
+        }
+        return new Token(Token.Type.EOF, null);
+    }
+    
+    private boolean moveNext() {
+        if (currentIndex < tokens.size() - 1) {
+            currentIndex++;
+            return true;
+        }
+        return false;
     }
 
+    // トークン列から抽象構文木を構築
     private JsonAst.JsonValue parseValue() {
-        var token = tokenizer.current();
-        switch(token.type) {
-            case INTEGER:
-                return parseNumber();
-            case STRING:
-                return parseString();
+        var token = current();
+        
+        switch (token.type) {
             case TRUE:
-                return parseTrue();
+                return new JsonAst.JsonTrue();
             case FALSE:
-                return parseFalse();
-            case NULL:
-                return parseNull();
+                return new JsonAst.JsonFalse();
+            case STRING:
+                return new JsonAst.JsonString((String) token.value);
             case LBRACKET:
                 return parseArray();
-            case LBRACE:
-                return parseObject();
+            // 他のトークンタイプも同様に処理...
         }
-        throw new RuntimeException("cannot reach here");
     }
 
-    private JsonAst.JsonTrue parseTrue() {
-        Token currentToken = tokenizer.current();
-        if(currentToken.type == Token.Type.TRUE) {
-            tokenizer.moveNext(); // トークンを消費
-            return new JsonAst.JsonTrue();
-        }
-        throw new parser.ParseException("expected: true, actual: " + currentToken.value);
-    }
-
-    private JsonAst.JsonFalse parseFalse() {
-        Token currentToken = tokenizer.current();
-        if(currentToken.type == Token.Type.FALSE) {
-            tokenizer.moveNext(); // トークンを消費
-            return new JsonAst.JsonFalse();
-        }
-        throw new parser.ParseException("expected: false, actual: " + currentToken.value);
-    }
-
-    private JsonAst.JsonNull parseNull() {
-        Token currentToken = tokenizer.current();
-        if(currentToken.type == Token.Type.NULL) {
-            tokenizer.moveNext(); // トークンを消費
-            return new JsonAst.JsonNull();
-        }
-        throw new parser.ParseException("expected: null, actual: " + currentToken.value);
-    }
-
-    private JsonAst.JsonString parseString() {
-        Token currentToken = tokenizer.current();
-        if (currentToken.type == Token.Type.STRING) {
-            tokenizer.moveNext(); // トークンを消費
-            return new JsonAst.JsonString((String)currentToken.value);
-        }
-        throw new parser.ParseException("expected: string, actual: " + currentToken.value);
-    }
-
-    private JsonAst.JsonNumber parseNumber() {
-        Token currentToken = tokenizer.current();
-        // SimpleJsonTokenizerの実装では数値はToken.Type.INTEGERとして扱われる
-        if (currentToken.type == Token.Type.INTEGER) {
-            tokenizer.moveNext(); // トークンを消費
-            // JsonNumberはdoubleを期待するが、tokenizerはintを返すのでキャスト
-            return new JsonAst.JsonNumber(
-                ((Number)currentToken.value).doubleValue()
-            );
-        }
-        throw new parser.ParseException(
-            "expected: number, actual: " + currentToken.value
-        );
-    }
-
-    private Pair<JsonAst.JsonString, JsonAst.JsonValue> parsePair() {
-        // オブジェクトのキーは必ず文字列
-        Token keyToken = tokenizer.current();
-        if (keyToken.type != Token.Type.STRING) {
-            throw new parser.ParseException(
-                "expected: string for object key, actual: " + keyToken.value
-            );
-        }
-        JsonAst.JsonString key = new JsonAst.JsonString(
-            (String)keyToken.value
-        );
-        tokenizer.moveNext(); // キー文字列トークンを消費
-
-        if(tokenizer.current().type != Token.Type.COLON) {
-            throw new parser.ParseException(
-                "expected: `:`, actual: " + tokenizer.current().value
-            );
-        }
-        tokenizer.moveNext();
-        var value = parseValue();
-        return new Pair<>(key, value);
-    }
-
+    // オブジェクトの解析（トークンベース）
     private JsonAst.JsonObject parseObject() {
-        if(tokenizer.current().type != Token.Type.LBRACE) {
+        if(current().type != Token.Type.LBRACE) {
             throw new parser.ParseException(
-                "expected `{`, actual: " + tokenizer.current().value
+                "expected `{`, actual: " + current().value
             );
         }
 
-        tokenizer.moveNext();
-        if(tokenizer.current().type == Token.Type.RBRACE) {
+        moveNext();
+        if(current().type == Token.Type.RBRACE) {
             return new JsonAst.JsonObject(new ArrayList<>());
         }
 
@@ -1702,32 +1354,33 @@ public class SimpleJsonParser implements JsonParser {
         var pair= parsePair();
         members.add(pair);
 
-        while(tokenizer.moveNext()) {
-            if(tokenizer.current().type == Token.Type.RBRACE) {
+        while(moveNext()) {
+            if(current().type == Token.Type.RBRACE) {
                 return new JsonAst.JsonObject(members);
             }
-            if(tokenizer.current().type != Token.Type.COMMA) {
+            if(current().type != Token.Type.COMMA) {
                 throw new parser.ParseException(
-                    "expected: `,`, actual: " + tokenizer.current().value
+                    "expected: `,`, actual: " + current().value
                 );
             }
-            tokenizer.moveNext();
+            moveNext();
             pair = parsePair();
             members.add(pair);
         }
 
         throw new parser.ParseException("unexpected EOF");
     }
-
+    
+    // 配列の解析（トークンベース）
     private JsonAst.JsonArray parseArray() {
-        if(tokenizer.current().type != Token.Type.LBRACKET) {
+        if(current().type != Token.Type.LBRACKET) {
             throw new parser.ParseException(
-                "expected: `[`, actual: " + tokenizer.current().value
+                "expected: `[`, actual: " + current().value
             );
         }
 
-        tokenizer.moveNext();
-        if(tokenizer.current().type == Token.Type.RBRACKET) {
+        moveNext();
+        if(current().type == Token.Type.RBRACKET) {
             return new JsonAst.JsonArray(new ArrayList<>());
         }
 
@@ -1735,306 +1388,52 @@ public class SimpleJsonParser implements JsonParser {
         var value = parseValue();
         values.add(value);
 
-        while(tokenizer.moveNext()) {
-            if(tokenizer.current().type == Token.Type.RBRACKET) {
+        while(moveNext()) {
+            if(current().type == Token.Type.RBRACKET) {
                 return new JsonAst.JsonArray(values);
             }
-            if(tokenizer.current().type != Token.Type.COMMA) {
+            if(current().type != Token.Type.COMMA) {
                 throw new parser.ParseException(
-                    "expected: `,`, actual: " + tokenizer.current().value
+                    "expected: `,`, actual: " + current().value
                 );
             }
-            tokenizer.moveNext();
+            moveNext();
             value = parseValue();
             values.add(value);
         }
 
         throw new ParseException("unexpected EOF");
     }
+    // 他のメソッドも同様に実装
 }
 ```
 
-構文解析器から呼び出されている`parserXXX()`メソッドを見るとわかりますが、字句解析器を導入したことによって、文字列の代わりにトークンの列を順に読み込んで、期待通りのトークンが現れたかを事前にチェックしています。また、この構文解析器には空白の読み飛ばしに関する処理が入っていないことに着目してください。
+このアプローチの重要な点は、**字句解析と構文解析の責任が明確に分離されている**ことです。`tokenizeAll()`メソッドが最初に入力全体をトークン列に変換し、パーサーはそのトークン列を処理します。これにより：
 
-PEG版と異なり、途中で失敗したら後戻り（バックトラック）するという処理も存在しません。後戻りによって、文法の柔軟性を増すというメリットがある一方、構文解析器の速度が落ちるというデメリットもあるため、字句解析器を用いた構文解析器は一般により高速に動作します（ただし、実装者の力量の影響も大きいです）。
+1. 関心の分離: 字句解析器はトークンの認識に、構文解析器は構造の構築に専念できます
+2. デバッグの容易さ: トークン列を事前に確認できるため、問題の切り分けが簡単です
+3. 実装の簡潔さ: 各コンポーネントが単一の責任を持つため、コードがシンプルになります
 
-ここで、字句解析器と構文解析器の連携について、具体的なJSON文字列 `{"key": "value"}` を例に、その解析ステップを見てみましょう。
+構文解析器の`parseXXX()`メソッドを見ると、文字列の代わりにトークン列を処理していることがわかります。また、この構文解析器には空白の読み飛ばしに関する処理が入っていません。これは、字句解析器が空白を処理済みだからです。
 
-**入力:** `{"key": "value"}`
+PEG版と異なり、途中で失敗したら後戻り（バックトラック）するという処理も存在しません。トークン列が事前に確定しているため、より決定的な解析が可能になります。
 
-1. `SimpleJsonParser.parse("{\"key\": \"value\"}")`:
+以下では抜粋したコードの詳細を説明します。残りのコードは、巻末の付録に掲載しています。
 
-  - `tokenizer = new SimpleJsonTokenizer("{\"key\": \"value\"}")` が実行される。
-  - `tokenizer.moveNext()` が呼び出される。
-    - `SimpleJsonTokenizer.moveNext()`:
-      - `index` は 0。`input.charAt(0)` は `{`。
-      - `accept("{", Token.Type.LBRACE, "{")` が呼び出される。
-      - `fetched` に `Token(LBRACE, "{")` が設定され、`index` は 1 になる。
-      - `true` を返す。
-  - `value = parseValue()` が呼び出される。
+## parseObject
 
-2. `SimpleJsonParser.parseValue()`:
-
-  - `token = tokenizer.current()` により、`Token(LBRACE, "{")` を取得。
-  - `switch(token.type)` で `LBRACE` ケースが選択され、`parseObject()` が呼び出される。
-
-3. `SimpleJsonParser.parseObject()` :
-
-  - `tokenizer.current().type` は `LBRACE` なので最初の `if` はパス。
-  - `tokenizer.moveNext()` が呼び出される。
-    - `SimpleJsonTokenizer.moveNext()`:
-      - `index` は 1。`input.charAt(1)` は `"`。
-      - `tokenizeStringLiteral()` が呼び出される。
-        - `"key"` を読み取り、`fetched` に `Token(STRING, "key")` が設定され、`index` は 6 になる。
-        - `true` を返す。
-  - `tokenizer.current().type` は `RBRACE` ではない。
-  - `pair = parsePair()` が呼び出される。
-
-4. `SimpleJsonParser.parsePair()`:
-
-  - `keyToken = tokenizer.current()` により `Token(STRING, "key")` を取得。
-  - `key = new JsonAst.JsonString("key")` が作成される。
-  - `tokenizer.moveNext()` が呼び出される。
-    - `SimpleJsonTokenizer.moveNext()`:
-      - `index` は 6。`input.charAt(6)` は `:`。
-      - `accept(":", Token.Type.COLON, ":")` が呼び出される。
-      - `fetched` に `Token(COLON, ":")` が設定され、`index` は 7 になる。
-      - `true` を返す。
-  - `tokenizer.current().type` は `COLON` なので `if` はパス。
-  - `tokenizer.moveNext()` が呼び出される。
-    - `SimpleJsonTokenizer.moveNext()`:
-      - `index` は 7。`input.charAt(7)` は `"`。
-      - `tokenizeStringLiteral()` が呼び出される。
-        - `"value"` を読み取り、`fetched` に `Token(STRING, "value")` が設定され、`index` は 14 になる。
-        - `true` を返す。
-  - `value = parseValue()` が呼び出される。
-
-5. `SimpleJsonParser.parseValue()` (2回目) :
-
-  - `token = tokenizer.current()` により `Token(STRING, "value")` を取得。
-  - `switch(token.type)` で `STRING` ケースが選択され、`parseString()` が呼び出される。
-
-6. `SimpleJsonParser.parseString()` :
-
-  - `currentToken.type` は `STRING` なので `if` はパス。
-  - `tokenizer.moveNext()` が呼び出される。
-    - `SimpleJsonTokenizer.moveNext()`:
-      - `index` は 14。`input.charAt(14)` は `}`。
-      - `accept("}", Token.Type.RBRACE, "}")` が呼び出される。
-      - `fetched` に `Token(RBRACE, "}")` が設定され、`index` は 15 になる。
-      - `true` を返す。
-  - `new JsonAst.JsonString("value")` を返す。
-
-7. `SimpleJsonParser.parsePair()` に戻る:
-
-  - `value` に `JsonAst.JsonString("value")` が設定される。
-  - `new Pair<>(key, value)` を返す。
-
-8. `SimpleJsonParser.parseObject()` に戻る:
-
-  - `members` に `Pair(JsonString("key"), JsonString("value"))` が追加される。
-  - `tokenizer.moveNext()` が呼び出される。
-    - `SimpleJsonTokenizer.moveNext()`:
-      - `index` は 15。`input.length()` と等しいのでループを抜け `false` を返す。
-  - `while` ループの条件が `false` になりループ終了。
-  - `tokenizer.current().type` は `RBRACE` なので `if` はパス。
-  - `new JsonAst.JsonObject(members)` を返す。
-
-9. `SimpleJsonParser.parseValue()` (1回目) に戻る:
-
-  - `parseObject()` の結果を返す。
-
-10. `SimpleJsonParser.parse()` に戻る:
-
-  - `value` に `JsonObject` が設定される。
-  - `tokenizer.rest()` は `input.substring(15)` で空文字列 `""` を返す。
-  - `new ParseResult<>(value, "")` を返す。
-
-このように、`SimpleJsonTokenizer` が入力文字列をトークン列に順次変換し、`SimpleJsonParser` はそのトークン列を消費しながら構文構造を組み立てていきます。`SimpleJsonTokenizer` の `moveNext()` 内の `switch` 文で空白文字 (`' '`, `\t`, `\n`, `\r'`) が処理され `index` が進められるため、`SimpleJsonParser` は空白文字の存在を意識することなく、本質的な構文解析に集中できるというメリットがあります。
-
-## JSONの字句解析器
-
-JSONの字句解析器について、この節では、主要な部分に着目して説明します。
-
-### ヘッダ部
-
-まず、JSONの字句解析器を実装したクラスである`SimpleJsonTokenizer`の先頭（ヘッダ）部分を読んでみます。
-
-```java
-public class SimpleJsonTokenizer implements JsonTokenizer {
-    private final String input;
-    private int index;
-    private Token fetched;
-
-    public SimpleJsonTokenizer(String input) {
-        this.input = input;
-        this.index = 0;
-    }
-```
-
-`String`型のフィールド`input`は、トークンに切り出す元となる文字列を表します。`int`型のフィールド`index`は、今、字句解析器が文字列の何番目を読んでいるかを表すフィールドで0オリジンです。`Token`型のフィールド`fetched`には、字句解析器が切り出したトークンが保存されます。
-
-コンストラクタ中では、入力文字列`input`を受け取り、フィールドに格納および、`index`を0に初期化しています。
-
-### 本体部
-
-`SimpleTokenizer`の主要なメソッドは、
-
-- `tokenizeNumber()`
-- `tokenizeStringLiteral()`
-- `accept()`
-- `moveNext()`
-- `current()`
-
-となります。以下、これらのメソッドについて説明します。
-
-### tokenizeNumber
-
-`tokenizeNumber()`メソッドは、文字列の現在位置から開始して、数値トークンを切り出すためのメソッドです。引数`positive`の値が`true`なら、正の整数を、`false`なら、負の整数をトークンとして切り出しています。返り値はトークンの切り出しに成功したか、失敗したかを表します。
-
-### tokenizeStringLiteral
-
-`tokenizeStringLiteral()` メソッドは、文字列の現在位置から開始して、文字列リテラルトークンを切り出すためのメソッドです。返り値はトークンの切り出しに成功したか、失敗したかを表します。
-
-### accept
-
-`accept()` メソッドは、文字列の現在位置から開始して、指定された文字列`literal`にマッチした場合に、対応する種類`type`と値`value`を持つトークンを生成し、内部状態（`fetched`フィールドと`index`フィールド）を更新します。このメソッドは主に`moveNext()`メソッド内部で、固定的なリテラル（例: `true`, `false`, `{`, `}` など）をトークン化する際に使用されます。
-
-### moveNext
-
-`moveNext()` メソッドは、字句解析器の中核となるメソッドです。呼び出されると、次のトークンを発見するまで、文字列の位置を進め、トークンが発見されたら、トークンを`fetched`に格納して、`true`を返します。トークン列の終了位置に来たら`false`を返します。これは、`Iterator`パターンの一種とも言えますが、典型的な`Iterator`と異なり、`moveNext()`が副作用を持つ点がポイントでしょうか。この点は、.NETの`IEnumerator`のアプローチを参考にしました。
-
-### current
-
-`current()`メソッドは、`moveNext()`メソッドが`true`を返したあとに呼び出すと、切り出せたトークンを取得することができます。`moveNext()`を次に呼び出すと、`current()`の値が変わってくる点に注意が必要です。
-
-## JSONの構文解析器
-
-JSONの字句解析器である`SimpleTokenizer`はこのようにして実装しましたが、JSONの構文解析器である`SimpleJSONParser`はどのように実装されているのでしょうか。このクラスは、主に
-
-- `parseTrue()`メソッド：規則`TRUE`に対応する構文解析メソッド
-- `parseFalse()`メソッド：規則`FALSE`に対応する構文解析メソッド
-- `parseNull()`メソッド：規則`NULL`に対応する構文解析メソッド
-- `parseString()`メソッド：規則`STRING`に対応する構文解析メソッド
-- `parseNumber()`メソッド：規則`NUMBER`に対応する構文解析メソッド
-- `parseObject()`メソッド：規則`object`に対応する構文解析メソッド
-- `parseArray()`メソッド：規則`array`に対応する構文解析メソッド
-- `parseValue()`メソッド: 規則`value`に対応する構文解析メソッド
-
-というメソッドからなっており、それぞれが内部で`SimpleTokenizer`クラスのオブジェクトのメソッドを呼び出しています。では、これらのメソッドについて順番に見て行きましょう。
-
-### parseTrue
-
-`parseTrue()`メソッドは、規則`TRUE`に対応するメソッドで、JSONの`true`に対応するものを解析するメソッドでもあります。実装は以下のようになります：
-
-```java
-    private JsonAst.JsonTrue parseTrue() {
-        Token currentToken = tokenizer.current();
-        if(currentToken.type == Token.Type.TRUE) {
-            tokenizer.moveNext(); // トークンを消費
-            return new JsonAst.JsonTrue();
-        }
-        throw new parser.ParseException(
-            "expected: true, actual: " + currentToken.value
-        );
-    }
-```
-
-見るとわかりますが、`tokenizer`が保持している次のトークンの値が`true`だったら、`JsonAst.JsonTrue`のインスタンスを返しているだけですね。ほぼ、字句解析器に処理を丸投げしているだけですから、詳しい説明は不要でしょう。
-
-### parseFalse
-
-`parseFalse()`メソッドは、規則`FALSE`に対応するメソッドで、JSONの`false`に対応するものを解析するメソッドでもあります。実装は以下のようになります：
-
-```java
-    private JsonAst.JsonFalse parseFalse() {
-        Token currentToken = tokenizer.current();
-        if(currentToken.type == Token.Type.FALSE) {
-            tokenizer.moveNext(); // トークンを消費
-            return new JsonAst.JsonFalse();
-        }
-        throw new parser.ParseException(
-            "expected: false, actual: " + currentToken.value
-        );
-    }
-```
-
-実装については、`parseTrue()`とほぼ同様なので説明は省略します。
-
-### parseNull
-
-`parseNull()`メソッドは、規則`NULL`に対応するメソッドで、JSONの`null`に対応するものを解析するメソッドでもあります。実装は以下のようになります：
-
-```java
-    private JsonAst.JsonNull parseNull() {
-        Token currentToken = tokenizer.current();
-        if(currentToken.type == Token.Type.NULL) {
-            tokenizer.moveNext(); // トークンを消費
-            return new JsonAst.JsonNull();
-        }
-        throw new parser.ParseException(
-            "expected: null, actual: " + currentToken.value
-        );
-    }
-```
-
-実装については、`parseTrue()`とほぼ同様なので説明は省略します。
-
-### parseString
-
-`parseString()`メソッドは、規則`STRING`に対応するメソッドで、JSONの`"..."`に対応するものを解析するメソッドでもあります。実装は以下のようになります：
-
-```java
-    private JsonAst.JsonString parseString() {
-        Token currentToken = tokenizer.current();
-        if (currentToken.type == Token.Type.STRING) {
-            tokenizer.moveNext(); // トークンを消費
-            return new JsonAst.JsonString((String)currentToken.value);
-        }
-        throw new parser.ParseException(
-            "expected: string, actual: " + currentToken.value
-        );
-    }
-```
-
-実装については、`parseTrue()`とほぼ同様なので説明は省略します。
-
-### parseNumber
-
-`parseNumber()`メソッドは、規則`NUMBER`に対応するメソッドで、JSONの`1, 2, 3, 4, ...`に対応するものを解析するメソッドでもあります。実装は以下のようになります：
-
-```java
-    private JsonAst.JsonNumber parseNumber() {
-        Token currentToken = tokenizer.current();
-        // SimpleJsonTokenizerの実装では数値はToken.Type.INTEGERとして扱われる
-        if (currentToken.type == Token.Type.INTEGER) {
-            tokenizer.moveNext(); // トークンを消費
-            return new JsonAst.JsonNumber(
-                ((Number)currentToken.value).doubleValue()
-            );
-        }
-        throw new parser.ParseException(
-            "expected: number, actual: " + currentToken.value
-        );
-    }
-```
-
-実装については、`parseTrue()`とほぼ同様なので説明は省略します。
-
-### parseObject
-
-`parseObject()`メソッドは、規則`object`に対応するメソッドで、JSONのオブジェクトリテラルに対応するものを解析するメソッドでもあります。実装は以下のようになります：
+`parseObject()`メソッドは、規則`object`に対応するメソッドで、JSONのオブジェクトリテラルに対応するものを解析するメソッドでもあります。改めて実装を示すと以下のようになります：
 
 ```java
     private JsonAst.JsonObject parseObject() {
-        if(tokenizer.current().type != Token.Type.LBRACE) {
+        if(current().type != Token.Type.LBRACE) {
             throw new parser.ParseException(
-                "expected `{`, actual: " + tokenizer.current().value
+                "expected `{`, actual: " + current().value
             );
         }
 
-        tokenizer.moveNext();
-        if(tokenizer.current().type == Token.Type.RBRACE) {
+        moveNext();
+        if(current().type == Token.Type.RBRACE) {
             return new JsonAst.JsonObject(new ArrayList<>());
         }
 
@@ -2043,16 +1442,16 @@ JSONの字句解析器である`SimpleTokenizer`はこのようにして実装�
         var pair= parsePair();
         members.add(pair);
 
-        while(tokenizer.moveNext()) {
-            if(tokenizer.current().type == Token.Type.RBRACE) {
+        while(moveNext()) {
+            if(current().type == Token.Type.RBRACE) {
                 return new JsonAst.JsonObject(members);
             }
-            if(tokenizer.current().type != Token.Type.COMMA) {
+            if(current().type != Token.Type.COMMA) {
                 throw new parser.ParseException(
-                    "expected: `,`, actual: " + tokenizer.current().value
+                    "expected: `,`, actual: " + current().value
                 );
             }
-            tokenizer.moveNext();
+            moveNext();
             pair = parsePair();
             members.add(pair);
         }
@@ -2073,18 +1472,18 @@ JSONの字句解析器である`SimpleTokenizer`はこのようにして実装�
 
 ### parseArray
 
-`parseArray()`メソッドは、規則`array`に対応するメソッドで、JSONの配列リテラルに対応するものを解析するメソッドでもあります。実装は以下のようになります：
+`parseArray()`メソッドは、規則`array`に対応するメソッドで、JSONの配列リテラルに対応するものを解析するメソッドでもあります。改めて実装を示すと以下のようになります：
 
 ```java
     private JsonAst.JsonArray parseArray() {
-        if(tokenizer.current().type != Token.Type.LBRACKET) {
+        if(current().type != Token.Type.LBRACKET) {
             throw new parser.ParseException(
-                "expected: `[`, actual: " + tokenizer.current().value
+                "expected: `[`, actual: " + current().value
             );
         }
 
-        tokenizer.moveNext();
-        if(tokenizer.current().type == Token.Type.RBRACKET) {
+        moveNext();
+        if(current().type == Token.Type.RBRACKET) {
             return new JsonAst.JsonArray(new ArrayList<>());
         }
 
@@ -2092,16 +1491,16 @@ JSONの字句解析器である`SimpleTokenizer`はこのようにして実装�
         var value = parseValue();
         values.add(value);
 
-        while(tokenizer.moveNext()) {
-            if(tokenizer.current().type == Token.Type.RBRACKET) {
+        while(moveNext()) {
+            if(current().type == Token.Type.RBRACKET) {
                 return new JsonAst.JsonArray(values);
             }
-            if(tokenizer.current().type != Token.Type.COMMA) {
+            if(current().type != Token.Type.COMMA) {
                 throw new parser.ParseException(
-                    "expected: `,`, actual: " + tokenizer.current().value
+                    "expected: `,`, actual: " + current().value
                 );
             }
-            tokenizer.moveNext();
+            moveNext();
             value = parseValue();
             values.add(value);
         }
@@ -2120,7 +1519,49 @@ JSONの字句解析器である`SimpleTokenizer`はこのようにして実装�
 
 のような動作を行います。実際のJSONの配列と対応付けてみると、より理解が進むでしょう。
 
-なお、`parseArray()`のコードを読めばわかるように、ほとんどのコードは、`parseObject()`と共通のものになっています。もしこれが気になるようであれば、共通部分をくくりだすことも出来ます。
+`parseArray()`のコードを読めばわかるように、ほとんどのコードは、`parseObject()`と共通のものになっています。もしこれが気になるようであれば、共通部分をくくりだすことも出来ます。他の割愛したメソッドも同様に、トークンを読み取って期待される構文を解析するという流れになっています。
+
+### 字句解析器と構文解析器の連携
+
+字句解析器を使った構文解析の流れを、`{"key": "value"}` を例に説明します：
+
+1. **字句解析フェーズ**: `tokenizeAll()`が入力全体を一度にトークン列に変換
+
+```
+入力: {"key": "value"}
+↓
+トークン列: [LBRACE, STRING("key"), COLON, STRING("value"), RBRACE, EOF]
+```
+
+2. **構文解析フェーズ**: パーサーがトークン列を走査しながら抽象構文木を構築
+
+- currentIndex == 0: `LBRACE`を見て`parseObject()`を呼び出し
+- currentIndex == 1: `STRING("key")`を読み取り
+- currentIndex == 2: `COLON`を確認
+- currentIndex == 3: `STRING("value")`を`parseValue()`で処理
+- currentIndex == 4: `RBRACE`で終了を確認
+- 最終的にオブジェクトの抽象構文木を生成
+
+この方式ではトークン列が事前に確定しているため、以下の利点があります：
+
+- パーサーは純粋に構造の解析に集中できる
+- トークン列をログ出力してデバッグが容易
+
+## 字句解析器と構文解析器の違い
+
+前節のPEGベースの構文解析器と、この節の字句解析器を使った構文解析器の主な違いは以下の通りです：
+
+1. 関心の分離: 字句解析と構文解析が明確に分離されている
+2. 空白の処理: 字句解析器が空白を処理するため、構文解析器は空白を意識しない
+3. バックトラック: 字句解析器を使う方式では通常バックトラックを行わない
+4. 性能: 一般的に字句解析器を使う方式の方が高速
+
+PEGベースの構文解析器にはいいとこなしのように見えますが、PEGべースの構文解析器は、以下のような利点もあります：
+
+1. シンプルな実装: PEGは直感的で、構文解析のロジックが大幅に簡潔に表現できる
+2. 再帰的な構造の自然な表現: 再帰的な文法を自然に扱えるため、特にネストされた構造の解析が容易
+
+PEGベースの構文解析器は、先にトークン列を生成する必要がないため、文字列補間のような、一見トークン化が難しいケースでも、構文解析器の中で直接文字列を解析できるという利点があります。
 
 ## まとめ
 
