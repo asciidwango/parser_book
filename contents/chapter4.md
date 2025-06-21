@@ -905,48 +905,6 @@ NFAの問題点は「同時に複数の状態にいる可能性がある」こ�
 
 状態8を含む集合Eが受理状態となります。
 
-#### 同じ正規表現のDFA（簡略化後）
-
-到達不可能な状態を除去し、状態名を簡略化すると、以下のようになります：
-
-```{=latex}
-\begin{center}
-\begin{tikzpicture}[
-  >=stealth',
-  node distance=3cm,
-  state/.style={circle, draw, minimum size=12mm},
-  accept/.style={state, double}
-]
-  % 状態の定義
-  \node[state] (s0) {\{0\}};
-  \node[state] (s06) [right of=s0] {\{0,6\}};
-  \node[state] (s07) [right of=s06] {\{0,7\}};
-  \node[accept] (s08) [right of=s07] {\{0,8\}};
-  
-  % 遷移の定義
-  \draw[->] (s0) -- node[above] {$a$} (s06);
-  \draw[->] (s0) edge[loop below] node[below] {$b$} ();
-  
-  \draw[->] (s06) -- node[above] {$b$} (s07);
-  \draw[->] (s06) edge[loop below] node[below] {$a$} ();
-  
-  \draw[->] (s07) -- node[above] {$b$} (s08);
-  \draw[->] (s07) to[bend left=30] node[above] {$a$} (s06);
-  \draw[->] (s07) to[bend right=50] node[below] {$b$} (s0);
-  
-  \draw[->] (s08) to[bend left=40] node[above] {$a$} (s06);
-  \draw[->] (s08) to[bend right=60] node[below] {$b$} (s0);
-  
-  % 開始状態の矢印
-  \draw[->] ([xshift=-1cm]s0.west) -- (s0);
-\end{tikzpicture}
-\end{center}
-```
-
-このDFAは「aまたはbを任意回繰り返した後、abbで終わる」文字列を正確に認識します。
-
-より簡潔なDFAになりました。
-
 #### なぜ括弧の対応は無理なのか
 
 正規表現は結局のところDFAに変換できることがわかりました。では、なぜオートマトン（正規表現）では括弧の対応がチェックできないのでしょうか？
@@ -1173,9 +1131,9 @@ S
 
 1. 文脈自由文法の基礎
 
-  - Javaのif文やJSONの構造など、プログラミングの「入れ子構造」は文脈自由文法で表現される
-  - BNFから文脈自由文法への変換は記法の違いに過ぎない
-  - 生成規則、非終端記号、終端記号という基本要素で構成される
+    - Javaのif文やJSONの構造など、プログラミングの「入れ子構造」は文脈自由文法で表現される
+    - BNFから文脈自由文法への変換は記法の違いに過ぎない
+    - 生成規則、非終端記号、終端記号という基本要素で構成される
 
 2. 言語を集合として理解する
 
@@ -1187,7 +1145,7 @@ S
 
     - 正規表現は正規言語を表現するための強力なツール
     - NFA（非決定性有限オートマトン）とDFA（決定性有限オートマトン）の違い
-    - 正規表現->NFA->DFAへの変換方法と実用例
+    - 正規表現->NFA->DFAへの変換方法
 
 4. 言語の階層
 
