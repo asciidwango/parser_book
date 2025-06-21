@@ -1084,7 +1084,9 @@ We are parsers.
 
 以下では字句解析器を使った構文解析器の全体像を示します。ここでは、コアとなるアイデアに絞って説明します。完全なソースコードは巻末の付録を参照してください。
 
-まず、JSONの字句解析器（トークナイザー）の基本構造は次のようになります。
+### JSONの字句解析器
+
+JSONの字句解析器（トークナイザー）の基本構造は次のようになります。
 
 ```java
 public class SimpleJsonTokenizer implements JsonTokenizer {
@@ -1123,7 +1125,7 @@ public class SimpleJsonTokenizer implements JsonTokenizer {
         }
     }
     
-    // 文字列トークンの読み取り（エスケープシーケンスも対応）
+    // 文字列トークンの読み取り（エスケープシーケンス非対応）
     private boolean tokenizeStringLiteral() {
         if(input.charAt(index) != '"') return false;
         index++;
@@ -1135,7 +1137,6 @@ public class SimpleJsonTokenizer implements JsonTokenizer {
                 index++;
                 return true;
             }
-            // エスケープシーケンスの処理も含む
             builder.append(ch);
             index++;
         }
@@ -1144,7 +1145,31 @@ public class SimpleJsonTokenizer implements JsonTokenizer {
 }
 ```
 
-次に、この字句解析器を使った構文解析器の基本構造を示します。トークナイザーが一度にすべてのトークンを生成し、パーサーはそのトークン列を処理します。
+このコードは`SimpleJsonTokenizer`クラスの基本構造を示しています。主な特徴は以下の通りです：
+
+- `tokenizeAll()`：
+    - 入力文字列全体を一度に処理してトークン列を生成
+    - `moveNext()`を繰り返し呼び出してトークンを収集
+    - 最後に`EOF`（End Of File）トークンを追加
+
+- `moveNext()`：
+    - まず空白文字をスキップ
+    - 現在の文字を見て、トークンの種類を判定
+    - switch文で各文字に応じた処理を実行
+        - `"` → 文字列リテラルの処理
+        - `{`、`[` → 括弧トークンの生成
+        - その他の文字も同様にパターンマッチング
+
+- `tokenizeStringLiteral()`メソッド：
+    - ダブルクォートで囲まれた文字列を読み取る
+    - 閉じクォートが見つかるまで文字を収集
+    - エスケープシーケンス非対応
+
+この設計により、字句解析の責任が明確になり、構文解析器は純粋にトークンの構造解析に専念できます。
+
+### JSONの構文解析器
+
+この字句解析器を使った構文解析器の基本構造を示します。トークナイザーが一度にすべてのトークンを生成し、パーサーはそのトークン列を処理します。
 
 ```java
 public class SimpleJsonParser implements JsonParser {
@@ -1153,10 +1178,9 @@ public class SimpleJsonParser implements JsonParser {
 
     public ParseResult<JsonAst.JsonValue> parse(String input) {
         // 入力を一度に完全にトークン化
-        SimpleJsonTokenizer tokenizer = new SimpleJsonTokenizer(input);
+        var tokenizer = new SimpleJsonTokenizer(input);
         this.tokens = tokenizer.tokenizeAll();
         this.index = 0;
-        
         var value = parseValue();
         return new ParseResult<>(value, "");
     }
@@ -1178,88 +1202,17 @@ public class SimpleJsonParser implements JsonParser {
 
     // トークン列から抽象構文木を構築
     private JsonAst.JsonValue parseValue() {
-        var token = current();
-        
-        switch (token.type) {
-            case TRUE:
-                return new JsonAst.JsonTrue();
-            case FALSE:
-                return new JsonAst.JsonFalse();
-            case STRING:
-                return new JsonAst.JsonString((String) token.value);
-            case LBRACKET:
-                return parseArray();
-            // 他のトークンタイプも同様に処理...
-        }
+        // 中身は後で解説
     }
 
     // オブジェクトの解析（トークンベース）
     private JsonAst.JsonObject parseObject() {
-        if(current().type != Token.Type.LBRACE) {
-            throw new ParseException(
-                "expected `{`, actual: " + current().value
-            );
-        }
-
-        moveNext();
-        if(current().type == Token.Type.RBRACE) {
-            return new JsonAst.JsonObject(new ArrayList<>());
-        }
-
-        List<Pair<JsonAst.JsonString, JsonAst.JsonValue>> members = 
-            new ArrayList<>();
-        var pair= parsePair();
-        members.add(pair);
-
-        while(moveNext()) {
-            if(current().type == Token.Type.RBRACE) {
-                return new JsonAst.JsonObject(members);
-            }
-            if(current().type != Token.Type.COMMA) {
-                throw new ParseException(
-                    "expected: `,`, actual: " + current().value
-                );
-            }
-            moveNext();
-            pair = parsePair();
-            members.add(pair);
-        }
-
-        throw new ParseException("unexpected EOF");
+        // 中身は後で解説
     }
     
     // 配列の解析（トークンベース）
     private JsonAst.JsonArray parseArray() {
-        if(current().type != Token.Type.LBRACKET) {
-            throw new ParseException(
-                "expected: `[`, actual: " + current().value
-            );
-        }
-
-        moveNext();
-        if(current().type == Token.Type.RBRACKET) {
-            return new JsonAst.JsonArray(new ArrayList<>());
-        }
-
-        List<JsonAst.JsonValue> values = new ArrayList<>();
-        var value = parseValue();
-        values.add(value);
-
-        while(moveNext()) {
-            if(current().type == Token.Type.RBRACKET) {
-                return new JsonAst.JsonArray(values);
-            }
-            if(current().type != Token.Type.COMMA) {
-                throw new ParseException(
-                    "expected: `,`, actual: " + current().value
-                );
-            }
-            moveNext();
-            value = parseValue();
-            values.add(value);
-        }
-
-        throw new ParseException("unexpected EOF");
+        // 中身は後で解説
     }
     // 他のメソッドも同様に実装
 }
@@ -1275,11 +1228,40 @@ public class SimpleJsonParser implements JsonParser {
 
 PEG版と異なり、途中で失敗したら後戻り（バックトラック）するという処理も存在しません。トークン列が事前に確定しているため、より決定的な解析が可能になります。
 
-以下では抜粋したコードの詳細を説明します。残りのコードは、巻末の付録に掲載しています。
+以下では構文解析のための各メソッドの詳細を説明します。残りのコードは、巻末の付録に掲載しています。
 
-## parseObject
+### paseValue
 
-`parseObject()`メソッドは、規則`object`に対応するメソッドで、JSONのオブジェクトリテラルに対応するものを解析するメソッドでもあります。改めて実装を示すと以下のようになります：
+`parseValue()`メソッドは、JSONの値を解析するためのメソッドです。これは、BNFで定義された`value = true | false | null | number | string | object | array`に対応しています。実装は以下のようになります。
+
+```java
+    private Ast.JsonValue parseValue() {
+        var token = current();
+        switch(token.type) {
+            case TRUE:
+                return parseTrue();
+            case FALSE:
+                return parseFalse();
+            case NULL:
+                return parseNull();
+            case INTEGER:
+                return parseNumber();
+            case STRING:
+                return parseString();
+            case LBRACE:
+                return parseObject();
+            case LBRACKET:
+                return parseArray();
+        }
+        throw new RuntimeException("cannot reach here");
+    }
+```
+
+`current()`メソッドは、現在のトークンを取得するためのメソッドで、トークン列から現在の位置のトークンを返します。`switch`文では、先頭のトークンの種類に応じて適切な解析メソッドを呼び出しています。バックトラックが必要ないため、各トークンの種類に応じて直接対応するメソッドを呼び出す形になっています。
+
+### parseObject
+
+`parseObject()`メソッドは、規則`object`に対応するメソッドで、JSONのオブジェクトリテラルに対応するものを解析するメソッドでもあります。実装を示すと以下のようになります：
 
 ```java
     private JsonAst.JsonObject parseObject() {
@@ -1329,7 +1311,7 @@ PEG版と異なり、途中で失敗したら後戻り（バックトラック�
 
 ### parseArray
 
-`parseArray()`メソッドは、規則`array`に対応するメソッドで、JSONの配列リテラルに対応するものを解析するメソッドでもあります。改めて実装を示すと以下のようになります：
+`parseArray()`メソッドは、規則`array`に対応するメソッドで、JSONの配列リテラルに対応するものを解析するメソッドでもあります。実装を示すと以下のようになります：
 
 ```java
     private JsonAst.JsonArray parseArray() {
@@ -1418,7 +1400,7 @@ PEGベースの構文解析器にはいいとこなしのように見えます�
 1. シンプルな実装: PEGは直感的で、構文解析のロジックが大幅に簡潔に表現できる
 2. 再帰的な構造の自然な表現: 再帰的な文法を自然に扱えるため、特にネストされた構造の解析が容易
 
-PEGベースの構文解析器は、先にトークン列を生成する必要がないため、文字列補間のような、一見トークン化が難しいケースでも、構文解析器の中で直接文字列を解析できるという利点があります。
+PEGベースの構文解析器は、トークン列を生成する必要がないため、文字列補間のような、一見トークン化が難しいケースでも、構文解析器の中で直接文字列を解析できるという利点があります。
 
 ## まとめ
 
