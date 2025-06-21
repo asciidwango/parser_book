@@ -1,8 +1,6 @@
 # 構文解析の本
 
-アスキードワンゴで出版予定の構文解析の技術書です。
-
-Pandoc形式で執筆・管理しています。
+アスキードワンゴで出版予定の構文解析の技術書です。Pandoc形式で執筆・管理しています。
 
 # リポジトリの構成
 
@@ -33,6 +31,44 @@ Pandoc形式で執筆・管理しています。
   .gitignore        // gitの管理対象から除外するパターン
 ```
 
+## 必要な環境
+
+- [Pandoc](https://pandoc.org/installing.html) 2.9以上
+- [LuaLaTeX](https://www.luatex.org/) (TeX Live 2022以上推奨)
+- 日本語フォント (Noto CJK フォント推奨)
+
+### Ubuntu/Debianでのインストール
+
+[こちら](https://qiita.com/YuH25/items/76f056bf691855e420e0)を参考に、以下のコマンドで必要なパッケージをインストールできます。
+
+```bash
+# Pandoc
+sudo apt update
+sudo apt install -y pandoc
+
+# TeX Live (LuaLaTeX含む)
+sudo apt install -y texlive-lang-japanese
+sudo apt install -y texlive-luatex
+sudo apt install -y texlive-pictures texlive-latex-extra
+
+# 日本語フォント
+sudo apt install -y fonts-noto-cjk
+
+# rsvg-convert  # SVG画像の変換に必要
+sudo apt install -y librsvg2-dev
+```
+
+### macOSでのインストール
+
+```bash
+# Homebrew使用
+brew install pandoc
+brew install --cask mactex
+
+# 日本語フォント
+brew install --cask font-noto-sans-cjk-jp
+```
+
 ## 書籍のビルド方法
 
 ### PDFビルド
@@ -50,12 +86,15 @@ Pandoc形式で執筆・管理しています。
 # ブラウザでbuild/preview.htmlを開く
 ```
 
-### 必要な環境
+## 執筆ワークフロー
 
-- Pandoc 2.9以上
-- LaTeX環境（LuaLaTeX）
-- 日本語フォント（Noto CJK フォント）
-- rsvg-convert（SVG画像変換用）
+```bash
+# 章を編集（contents/*.md）
+vim contents/chapter1.md
+
+# PDFを生成
+./build_pdf.sh
+```
 
 ## 趣旨
 
