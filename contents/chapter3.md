@@ -131,38 +131,40 @@ JSONのBNFによる定義を簡略化したものは以下で全てです。特�
 
 ```text
 json = ws value;
+value = true | false | null | number | string | object | array;
 object = LBRACE RBRACE | LBRACE pair {COMMA pair} RBRACE;
 pair = string COLON value;
 array = LBRACKET RBRACKET | LBRACKET value {COMMA value} RBRACKET ;
-value = true | false | null | object | array | number | string;
-string = ('""' | '"' {CHAR} '"') ws;
+string = ("\"\"" | "\"" {CHAR} "\"") ws;
 number = INT ws;
-true = 'true' ws;
-false = 'false' ws;
-null = 'null' ws;
+true = "true" ws;
+false = "false" ws;
+null = "null" ws;
 
-COMMA = ',' ws;
-COLON = ':' ws;
-LBRACE = '{' ws;
-RBRACE = '}' ws;
-LBRACKET = '[' ws;
-RBRACKET = ']' ws;
+COMMA = "," ws;
+COLON = ":" ws;
+LBRACE = "{" ws;
+RBRACE = "}" ws;
+LBRACKET = "[" ws;
+RBRACKET = "]" ws;
 
-ws = {' ' | '\t' | '\n' | '\r'} ;
-CHAR = 'a' | 'b' | 'c' | 'd' | 'e' | 'f' | 'g' | 'h' | 'i' | 'j' | 'k' | 'l' | 'm' |
-       'n' | 'o' | 'p' | 'q' | 'r' | 's' | 't' | 'u' | 'v' | 'w' | 'x' | 'y' | 'z' |
-       'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J' | 'K' | 'L' | 'M' |
-       'N' | 'O' | 'P' | 'Q' | 'R' | 'S' | 'T' | 'U' | 'V' | 'W' | 'X' | 'Y' | 'Z' |
-       '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' |
-       ' ' | '!' | '#' | '$' | '%' | '&' | '\'' | '(' | ')' | '*' | '+' | ',' |
-       '-' | '.' | '/' | ':' | ';' | '<' | '=' | '>' | '?' | '@' | '[' | ']' |
-       '^' | '_' | '`' | '{' | '|' | '}' | '~' ;
-INT = ['-'] ('0' | (NONZERO {DIGIT})) ;
-DIGIT = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' ;
-NONZERO = '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' ;
+ws = {" " | "\t" | "\n" | "\r"} ;
+CHAR = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" |
+       "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" |
+       "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H" | "I" | "J" | "K" | "L" | "M" |
+       "N" | "O" | "P" | "Q" | "R" | "S" | "T" | "U" | "V" | "W" | "X" | "Y" | "Z" |
+       "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" |
+       " " | "!" | "#" | "$" | "%" | "&" | "'" | "(" | ")" | "*" | "+" | "," |
+       "-" | "." | "/" | ":" | ";" | "<" | "=" | ">" | "?" | "@" | "[" | "]" |
+       "^" | "_" | "`" | "{" | "|" | "}" | "~" ;
+INT = ["-"] ("0" | (NONZERO {DIGIT})) ;
+DIGIT = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ;
+NONZERO = "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ;
 ```
 
 これまで説明したJSONの要素と比較して見慣れない記号が出てきましたが、一つ一つ見て行きましょう。
+
+なお、規則名の大文字・小文字の使い分けについてですが、`COMMA`、`LBRACE`のような大文字で書かれた規則は、後の字句解析の節で出てくる「トークン」に対応します。これらは単一の記号や固定の文字列を表すもので、構文解析の際には一つの単位として扱われます。一方、`json`、`value`のような小文字の規則は、より複雑な構造を表します。
 
 ### json
 
@@ -504,6 +506,12 @@ public class PegJsonParser implements JsonParser {
         return new ParseResult<>(value, input.substring(this.cursor));
     }
 
+    /**
+     * 指定された文字列リテラルが現在のカーソル位置にあることを確認し、
+     * マッチした場合はカーソルを進めます。
+     * @param literal 認識すべき文字列リテラル
+     * @throws ParseException リテラルがマッチしない場合
+     */
     private void recognize(String literal) {
         if(input.substring(cursor).startsWith(literal)) {
             cursor += literal.length();
@@ -520,6 +528,10 @@ public class PegJsonParser implements JsonParser {
     }
 
 
+    /**
+     * 空白文字（スペース、タブ、改行、キャリッジリターン）を
+     * スキップし、カーソルを次の非空白文字まで進めます。
+     */
     private void skipWhitespace() {
         OUTER:
         while(cursor < input.length()) {
@@ -538,13 +550,23 @@ public class PegJsonParser implements JsonParser {
         }
     }
 
-    // value = true | false | null | number | string | object | array;
+    /**
+     * JSONの値（value）を解析します。
+     * BNF: value = true | false | null | number | string | object | array
+     * @return 解析されたJSON値
+     * @throws ParseException 有効なJSON値が見つからない場合
+     */
     private JsonAst.JsonValue parseValue() {
         // 後で解説
     }
 
   
-    // true = "true" ws;
+    /**
+     * true値を解析します。
+     * BNF: true = "true" ws
+     * @return JSONのtrue値
+     * @throws ParseException "true"がマッチしない場合
+     */
     private JsonAst.JsonTrue parseTrue() {
         // 後で解説
     }
@@ -670,23 +692,6 @@ public class PegJsonParser implements JsonParser {
 
 ちなみに、この順番は重要です。`value`の例では右辺がそれぞれ排他的なので問題ありませんが、順番を変えると結果が変わってしまうことがあります。
 
-### nullの構文解析メソッド
-
-`null`の構文解析は、次のような`parseNull()` メソッドとして定義します。
-
-```java
-private JsonAst.JsonNull parseNull() {
-    recognize("null");
-    skipWhitespace();
-    return new JsonAst.JsonNull();
-}
-
-```
-
-このメソッドで行っていることを見ていきましょう。このメソッドでは、入力である`input`の現在位置が`"null"`という文字列で始まっているかをチェックします。もしそうなら、**JSONのnull**をあらわす`JsonAst.JsonNull`のインスタンスを返します。もし、先頭が`"null"`でなければ、構文解析は失敗なので例外を発生させますが、これは`recognize()`メソッドの中で行われています。`recognize()`の内部では、入力の現在位置と与えられた文字列を照合して、マッチしない場合例外を投げます。
-
-次に、`skipWhitespace()`メソッドを呼び出して、「空白の読み飛ばし」を行っています。
-
 ### trueの構文解析メソッド
 
 `true`の構文解析は、次のような `parseTrue()` メソッドとして定義します。
@@ -699,7 +704,9 @@ private JsonAst.JsonTrue parseTrue() {
 }
 ```
 
-見ればわかりますが、`parseNull()`とほぼ同じです。固定の文字列を解析するという点で両者はほぼ同じ処理なのです。
+このメソッドで行っていることを見ていきましょう。このメソッドでは、入力である`input`の現在位置が`"true"`という文字列で始まっているかをチェックします。もしそうなら、**JSONのtrue**をあらわす`JsonAst.JsonTrue`のインスタンスを返します。もし、先頭が`"true"`でなければ、構文解析は失敗なので例外を発生させますが、これは`recognize()`メソッドの中で行われています。`recognize()`の内部では、入力の現在位置と与えられた文字列を照合して、マッチしない場合例外を投げます。
+
+次に、`skipWhitespace()`メソッドを呼び出して、「空白の読み飛ばし」を行っています。
 
 ### falseの構文解析メソッド
 
@@ -713,7 +720,21 @@ private JsonAst.JsonFalse parseFalse() {
 }
 ```
 
-これも、`parseNull()`とほぼ同じですので、特に説明の必要はないでしょう。
+これも、`parseTrue()`とほぼ同じですので、特に説明の必要はないでしょう。
+
+### nullの構文解析メソッド
+
+`null`の構文解析は、次のような `parseNull()` メソッドとして定義します。
+
+```java
+private JsonAst.JsonNull parseNull() {
+    recognize("null");
+    skipWhitespace();
+    return new JsonAst.JsonNull();
+}
+```
+
+これも、`parseTrue()`や`parseFalse()`とほぼ同じです。固定の文字列を解析するという点で、これらのメソッドは共通の処理になっています。
 
 ### 数値の構文解析メソッド
 
@@ -768,7 +789,6 @@ private JsonAst.JsonFalse parseFalse() {
             return new JsonAst.JsonNumber(value);
         } catch (NumberFormatException e) {
             throw new ParseException("invalid number format: " + numberStr);
-            return null; // unreachable
         }
     }
 ```
@@ -811,7 +831,6 @@ private JsonAst.JsonFalse parseFalse() {
 
         if(ch != '"') {
             throw new ParseException("expected: " + "\"" + " actual: " + ch);
-            return null; // unreachable
         } else {
             skipWhitespace();
             return new JsonAst.JsonString(builder.toString());
@@ -877,11 +896,13 @@ private JsonAst.JsonFalse parseFalse() {
         values.add(value);
         try {
             while (true) {
+                backup = cursor;
                 parseComma();
                 value = parseValue();
                 values.add(value);
             }
         } catch (ParseException e) {
+            cursor = backup;
             parseRBracket();
             return new JsonAst.JsonArray(values);
         }
@@ -977,8 +998,8 @@ array = LBRACKET RBRACKET | LBRACKET {value {COMMA value}} RBRACKET ;
         var member = parsePair();
         members.add(member);
         try {
-            backup = cursor;
             while (true) {
+                backup = cursor;
                 parseComma();
                 member = parsePair();
                 members.add(member);
@@ -1230,7 +1251,7 @@ PEG版と異なり、途中で失敗したら後戻り（バックトラック�
 
 以下では構文解析のための各メソッドの詳細を説明します。残りのコードは、巻末の付録に掲載しています。
 
-### paseValue
+### parseValue
 
 `parseValue()`メソッドは、JSONの値を解析するためのメソッドです。これは、BNFで定義された`value = true | false | null | number | string | object | array`に対応しています。実装は以下のようになります。
 
