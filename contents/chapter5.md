@@ -1344,31 +1344,41 @@ T → x
 
 ```{=latex}
 \begin{center}
-\begin{tikzpicture}
-\node[draw, circle, minimum size=1.2cm] (I0) at (0, 2) {\small I0};
-\node[draw, circle, minimum size=1.2cm] (I1) at (4, 3) {\small I1};
-\node[draw, circle, minimum size=1.2cm] (I2) at (4, 1) {\small I2};
-\node[draw, circle, minimum size=1.2cm] (I3) at (8, 0) {\small I3};
-\node[draw, circle, double, minimum size=1.2cm] (I4) at (8, 3) {\small I4};
-\node[draw, circle, minimum size=1.2cm] (I5) at (8, 2) {\small I5};
-\node[draw, circle, minimum size=1.2cm] (I6) at (12, 2) {\small I6};
+\begin{tikzpicture}[
+  >=stealth',
+  node distance=3cm,
+  state/.style={circle, draw, minimum size=12mm},
+  accept/.style={state, double},
+  every edge/.style={draw, ->, >=stealth'}
+]
+% 状態の定義
+\node[state] (I0) at (0, 0) {\small I0};
+\node[state] (I1) at (4, 1) {\small I1};
+\node[state] (I2) at (4, -1) {\small I2};
+\node[state] (I3) at (8, -2) {\small I3};
+\node[accept] (I4) at (8, 1) {\small I4};
+\node[state] (I5) at (8, 0) {\small I5};
+\node[state] (I6) at (12, 0) {\small I6};
 
-% 遷移を描画
-\draw[->, thick] (I0) edge[bend left=10] node[above] {S} (I1);
-\draw[->, thick] (I0) edge[bend right=10] node[below] {T} (I2);
-\draw[->, thick] (I0) edge[bend right=20] node[below left] {x} (I3);
-\draw[->, thick] (I1) edge[bend left=10] node[above] {\$} (I4);
-\draw[->, thick] (I2) edge node[right] {+} (I5);
-\draw[->, thick] (I5) edge node[above] {S} (I6);
-\draw[->, thick] (I5) edge[bend left=15] node[below] {T} (I2);
-\draw[->, thick] (I5) edge[bend left=25] node[below] {x} (I3);
+% 遷移の定義
+% I0からの遷移
+\draw (I0) edge node[above left] {S} (I1);
+\draw (I0) edge node[below left] {T} (I2);
+\draw (I0) edge[bend right=20] node[below] {x} (I3);
 
-% 初期状態の表示
-\draw[->, thick] (-1.5, 2) -- (I0);
-\node at (-2, 2) {\small 開始};
+% I1からの遷移（受理状態へ）
+\draw (I1) edge node[above] {\$} (I4);
 
-% 受理状態の表示
-\node[below=3pt] at (I4) {\small 受理};
+% I2からの遷移
+\draw (I2) edge node[above] {+} (I5);
+
+% I5からの遷移
+\draw (I5) edge node[above] {S} (I6);
+\draw (I5) edge[bend left=15] node[below] {T} (I2);
+\draw (I5) edge[bend left=25] node[below] {x} (I3);
+
+% 開始矢印
+\draw[->] ([xshift=-1.5cm]I0.west) -- (I0);
 \end{tikzpicture}
 \end{center}
 ```
@@ -1377,8 +1387,8 @@ T → x
 
 1. **状態（円）**：各状態は LR(0)項の集合（閉包）を表す
 2. **遷移（矢印）**：文法記号を読むことで状態が変化する
-3. **初期状態（I0）**：拡張開始記号から始まる項目の閉包
-4. **受理状態（I4）**：`S' → E $・` を含む状態
+3. **初期状態（I0）**：構文解析の開始時の状態
+4. **受理状態（I4）**：構文解析が完了した状態
 
 **オートマトンの動作：**
 
@@ -1386,10 +1396,9 @@ T → x
 - 各状態で「どの規則をどこまで読んだか」が分かる
 - 受理状態に到達すれば、入力は正しく解析された
 
-これで、LR構文解析が「どの状態でどのアクション（シフトか還元か）を取るべきか」を事前に計算できることが理解できるでしょう。
+ここで「どの状態でどのアクション（シフトか還元か）を取るべきか」についてはまだ示されていませんが、ともあれ、オートマトンを構築することで、構文解析の進行状況を効率的に追跡できるのです。
 
-さて、ここからステップバイステップで先程の文法に対してLR(0)オートマトンを構築する過程を見ていきましょう。
-
+ここからはステップバイステップで先程の文法に対して、このLR(0)オートマトンを構築する過程を見ていきましょう。
 
 ### ステップ1：初期状態（I0）の作成
 
@@ -1535,7 +1544,48 @@ GOTO(I5, x) = I5でドットの後にxがある項目は状態I3と同じにな�
 - `I5 --T--> I2`
 - `I5 --x--> I3`
 
-最初に提示したLR(0)オートマトンはこれを図にしたものです。
+これを図にすると、以下のようになります（先ほど提示した図と同じです）：
+
+```{=latex}
+\begin{center}
+\begin{tikzpicture}[
+  >=stealth',
+  node distance=3cm,
+  state/.style={circle, draw, minimum size=12mm},
+  accept/.style={state, double},
+  every edge/.style={draw, ->, >=stealth'}
+]
+% 状態の定義
+\node[state] (I0) at (0, 0) {\small I0};
+\node[state] (I1) at (4, 1) {\small I1};
+\node[state] (I2) at (4, -1) {\small I2};
+\node[state] (I3) at (8, -2) {\small I3};
+\node[accept] (I4) at (8, 1) {\small I4};
+\node[state] (I5) at (8, 0) {\small I5};
+\node[state] (I6) at (12, 0) {\small I6};
+
+% 遷移の定義
+% I0からの遷移
+\draw (I0) edge node[above left] {S} (I1);
+\draw (I0) edge node[below left] {T} (I2);
+\draw (I0) edge[bend right=20] node[below] {x} (I3);
+
+% I1からの遷移（受理状態へ）
+\draw (I1) edge node[above] {\$} (I4);
+
+% I2からの遷移
+\draw (I2) edge node[above] {+} (I5);
+
+% I5からの遷移
+\draw (I5) edge node[above] {S} (I6);
+\draw (I5) edge[bend left=15] node[below] {T} (I2);
+\draw (I5) edge[bend left=25] node[below] {x} (I3);
+
+% 開始矢印
+\draw[->] ([xshift=-1.5cm]I0.west) -- (I0);
+\end{tikzpicture}
+\end{center}
+```
 
 ### LR(0)構文解析表の構築
 
