@@ -160,7 +160,7 @@ public class PEG2Java {
     
     // PEG式を表す抽象クラス
     public abstract static class Expr {
-        abstract String generate(String indent);
+        abstract String generate(int indentLevel);
     }
     
     // 文字列リテラル
@@ -169,8 +169,8 @@ public class PEG2Java {
         public Lit(String value) {
             this.value = value;
         }
-        String generate(String indent) {
-            return indent + "match(\"" + value + "\");";
+        String generate(int indentLevel) {
+            return ("match(\"" + value + "\");").indent(indentLevel);
         }
     }
 
@@ -181,8 +181,8 @@ public class PEG2Java {
             this.name = name;
         }
         // 非終端記号のコード生成
-        String generate(String indent) {
-            return indent + "parse" + name + "();";
+        String generate(int indentLevel) {
+            return ("parse" + name + "();").indent(indentLevel);
         }
     }
     
@@ -190,17 +190,14 @@ public class PEG2Java {
     static class Seq extends Expr {
         public final List<Expr> exprs;
         public Seq(Expr... exprs) {
-            this.exprs = Arrays.asList(exprs);
+            this.exprs = List.of(exprs);
         }
 
         // 連接のコード生成。単純にN個の式を順に生成
-        String generate(String indent) {
-            StringBuilder code = new StringBuilder();
-            for (Expr e : exprs) {
-                code.append(e.generate(indent));
-                code.append("\n");
-            }
-            return code.toString();
+        String generate(int indentLevel) {
+            return exprs.stream()
+                .map(e -> e.generate(indentLevel))
+                .collect(Collectors.joining("\n")) + "\n";
         }
     }
 
@@ -214,52 +211,47 @@ public class PEG2Java {
 
         // 順序付き選択のコード生成
         // try-catchを使ってバックトラックを実装
-        String generate(String indent) {
-            StringBuilder code = new StringBuilder();
-            code.append(indent + "int saved = pos;\n");
-            code.append(indent + "try {\n");
-            code.append(alt1.generate(indent + "    "));
-            code.append(indent + "} catch (Failure e) {\n");
-            code.append(indent + "    pos = saved;\n");
-            code.append(alt2.generate(indent + "    "));
-            code.append("\n");
-            code.append(indent + "}\n");
-            return code.toString();
+        String generate(int indentLevel) {
+            var code = """
+                int saved = pos;
+                try {
+                    %s
+                } catch (Failure e) {
+                    pos = saved;
+                    %s
+                }
+             """.formatted(
+                alt1.generate(indentLevel + 4).stripTrailing(), 
+                alt2.generate(indentLevel + 4))
+             code.indent(indentLevel);
         }
     }
     
     // コード生成のメインメソッド
     public static String generateParser(List<Rule> rules) {
         StringBuilder code = new StringBuilder();
-        code.append("public class Parser {\n");
-        // 例外クラスの定義
-        code.append("    public static class Failure ");
-        code.append("extends RuntimeException {\n");
-        code.append("        public Failure(String message) {\n");
-        code.append("            super(message);\n");
-        code.append("        }\n");
-        code.append("    }\n\n");
-        // フィールドの定義
-        code.append("    private String input;\n");
-        code.append("    private int pos;\n");
-        // コンストラクタの定義
-        code.append("    public Parser(String input) {\n");
-        code.append("        this.input = input;\n");
-        code.append("        this.pos = 0;\n");
-        code.append("    }\n\n");
-        // matchメソッドの定義
-        code.append("    public void match(String str) {\n");
-        code.append("        if (pos + str.length() <= input.length() &&\n");
-        code.append("            input.startsWith(str, pos)) {\n");
-        code.append("            pos += str.length();\n");
-        code.append("            return;\n");
-        code.append("        }\n");
-        code.append(
-            "        throw new Failure(\"Expected '\"" +
-            " + str + \"' at pos \" + pos);\n"
-        );
-        code.append("    }\n\n");
-
+        code.append("""
+            public class Parser {
+                public static class Failure extends RuntimeException {
+                    public Failure(String message) {
+                        super(message);
+                    }
+                }
+                private String input;
+                private int pos;
+                public Parser(String input) {
+                    this.input = input;
+                    this.pos = 0;
+                }
+                public void match(String str) {
+                    if (pos + str.length() <= input.length() &&
+                        input.startsWith(str, pos)) {
+                        pos += str.length();
+                        return;
+                    }
+                    throw new Failure("Expected '" + str + "' at pos " + pos);
+                }
+        """.stripLeading());
         // 各規則に対してメソッドを生成
         for (Rule rule : rules) {
             code.append("    public void parse" + rule.name + "() {\n");
@@ -268,7 +260,6 @@ public class PEG2Java {
             code.append("        return;\n");
             code.append("    }\n\n");
         }
-        
         code.append("}\n");
         return code.toString();
     }
