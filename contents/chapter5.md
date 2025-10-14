@@ -258,8 +258,12 @@ public class Dyck {
     }
 
     public boolean parse() {
-        boolean result = D();
-        return result && pos == input.length();
+        boolean accepted = D();
+        if(accepted && pos == input.length()) {
+            return true;
+        } else {
+            return false;
+        }
     }
 
     private boolean D() {
