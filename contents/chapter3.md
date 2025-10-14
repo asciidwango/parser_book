@@ -84,16 +84,23 @@ JSONのデータには文字列もあります。
 "hogehoge"
 ```
 
-のように、`""`で囲まれたものが文字列となります。JSONの仕様では、オブジェクトのキーは必ずダブルクォーテーションで囲まれた文字列でなければなりません。たとえば、以下は**JavaScriptの**オブジェクトリテラルとしては許容される場合がありますが（キー `name` が識別子の命名規則に合致するため）、**JSON**の定義には従っていません。
+のように、`""`で囲まれたものが文字列となります。JSONの仕様では、オブジェクトのキーは必ずダブルクォーテーションで囲まれた文字列でなければなりません。たとえば、以下は**JavaScriptの**オブジェクトリテラルとしては許容されますが（`name` が識別子の命名規則に合致するため）、**JSON**の定義には従っていません。
 
 ```js
 {
-  name: "Kota Mizushima", // nameがダブルクォーテーションで囲まれていない！
+  name: "Kota Mizushima",
   age:  41
 }
 ```
 
-このような形式は、多くのJSONパーサーではエラーとして扱われます。JavaScriptのオブジェクトリテラルとJSONの構文には違いがある点に注意してください。
+#### コラム：JSONとJavaScriptオブジェクトの違い
+
+JSONとJavaScriptのオブジェクトリテラルは似ていますが、いくつかの重要な違いがあります。以下の点に注意してください。
+
+- キーはJSONでは必ずダブルクォーテーションで囲まれた文字列です（例：`"name"`）。JavaScriptでは識別子であればダブルクオート省略可能です。
+- コメントはJSONには存在しません（`//` や `/* ... */` は不可）。
+- 末尾カンマはJSONでは不可です（JavaScriptの一部構文では許容される場合あり）。
+- 値の種類も異なります。`undefined`/`NaN`/`Infinity` などはJSONの値としては不正です。
 
 ### 真偽値
 
@@ -164,7 +171,7 @@ NONZERO = "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ;
 
 これまで説明したJSONの要素と比較して見慣れない記号が出てきましたが、一つ一つ見て行きましょう。
 
-なお、規則名の大文字・小文字の使い分けについてですが、`COMMA`、`LBRACE`のような大文字で書かれた規則は、後の字句解析の節で出てくる「トークン」に対応します。これらは単一の記号や固定の文字列を表すもので、構文解析の際には一つの単位として扱われます。一方、`json`、`value`のような小文字の規則は、より複雑な構造を表します。
+なお、規則名の大文字・小文字の使い分けについてですが、`COMMA`、`LBRACE`のような大文字で書かれた規則は、後の字句解析の節で出てくる「トークン」に対応します。これらは単一の記号や固定の文字列を表すもので、構文解析の際には一つの単位として扱われます。一方、`json`、`value`のような小文字の規則は、より複雑な構造を表します。補助規則として、`ws`（空白）、`CHAR`（印字可能文字の集合）、`INT`（整数）、`DIGIT`（数字1桁）、`NONZERO`（非ゼロの数字）を定義しています。
 
 ### json
 
@@ -174,7 +181,7 @@ NONZERO = "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ;
 json = ws value;
  ```
  
-のような**規則**の集まりによって、文法を表現します。`=`の左側である`json`が**左辺**で、右側（ここでは `ws value`）が**本体**になります。さらに、本体の中に出てくる、他の規則を参照する部分（ここでは`value`や`ws`)を非終端記号と呼びます。非終端記号は同じBNFで定義されている規則の左辺と一致する必要があります。
+のような**規則**の集まりによって、文法を表現します。各規則はセミコロン（`;`）で終わります。`=`の左側である`json`が**左辺**で、右側（ここでは `ws value`）が**本体**になります。さらに、本体の中に出てくる、他の規則を参照する部分（ここでは`value`や`ws`)を非終端記号と呼びます。非終端記号は同じBNFで定義されている規則の左辺と一致する必要があります。
   
 この規則を日本語で表現すると、「`json`という名前の規則は、`ws`の後に`value`が続く」と読むことができます。`value`は、JSONの値を表しているので、jsonという規則は`ws`（空白文字）の後にJSONの値が続くものを表しています。
 
@@ -195,7 +202,7 @@ object = LBRACE RBRACE | LBRACE pair {COMMA pair} RBRACE;
   - `RBRACE`はRight-Brace（閉じ波カッコ）の略で`}`を示しています
 - `LBRACE`が来た後に、`pair`が1回出現して、さらにその後に、「`COMMA`（カンマ）とそれに続く`pair`」というペアが0回以上繰り返して出現した後、`RBRACE`が来る
 
-のどちらかであることを表しています。
+のどちらかであることを表しています。ここで `{ ... }` は「0回以上の繰り返し」を表します（2章のBNFの説明を参照）。
 
 具体的なJSONを当てはめてみましょう。以下のJSONは`LBRACE RBRACE`にマッチします。
 
@@ -232,7 +239,7 @@ pair = string COLON value;
 "y":true
 ```
 
-などがあります。一方で、以下のテキストは`pair`にマッチしません。JavaScriptのオブジェクトとJSONが違う点です。
+などがあります。一方で、以下のテキストは`pair`にマッチしません（JavaScriptのオブジェクトとJSONの違いについては後述のコラムを参照）。
 
 ```
 x:1 // 文字列リテラルでないといけない
@@ -328,7 +335,7 @@ false = "false" ws;
 null = "null" ws;
 ```
 
-`null`は、ヌル値があるプログラミング言語だと、その値にマッピングされますが、ここではあくまでヌル値は`null`で表されることしか言っておらず、**意味は特に規定していない**ことに注意してください。
+JSON仕様は`null`の意味付けを規定しません。多くの実装ではホスト言語の`null`相当の値に対応づけますが、`null`を表現するためのリテラルがない言語では、`Option`や`Maybe`といったデータ型に対応づけることもあります。
 
 ### number
 
@@ -338,7 +345,7 @@ null = "null" ws;
 number = INT ws;
 ```
 
-整数（`INT`）に続いて、`ws`が来るのが`number`であるということを表現しています。
+整数（`INT`）に続いて、`ws`が来るのが`number`であるということを表現しています。簡単のため、本章では数値を整数に限定し、小数部や指数部は扱いません（実装拡張の話題は章末の演習を参照）。
 
 ### string
 
@@ -348,7 +355,7 @@ number = INT ws;
 string = ("\"\"" | "\"" CHAR+ "\"") ws;
 ```
 
-`"`で始まって、`CHAR`で定義される文字が0個以上続いて、 `"` で終わります。`CHAR`の定義はBNF中に含まれており、ダブルクォーテーションとバックスラッシュを除く印字可能文字を表しています。なお、本章ではエスケープシーケンスは扱わないため、バックスラッシュを含む文字列は処理できません。
+`"`で始まって、`CHAR`で定義される文字が0個以上続いて、 `"` で終わります。`CHAR`の定義はBNF中に含まれており、ダブルクォーテーションとバックスラッシュを除く印字可能文字を表しています。なお、簡単のため本章ではエスケープシーケンスは扱いません。
 
 ### JSONのBNFまとめ
 
@@ -374,7 +381,7 @@ JSONの定義と、文法について見てきました。構文解析器を実�
 - カンマ（`,`）やコロン（`:`）などの区切り文字も、構造として表現されるため個別のノードにはなりません
 - 括弧（`{}`、`[]`）も同様に、オブジェクトや配列という構造で表現されます
 
-以下の`JsonAst`の定義を見ると、JSONの各要素をJavaのクラスとして表現していることがわかります。これは、JSONという「文字列」を、Javaのオブジェクトという「構造化されたデータ」に変換するための定義です。
+以下の`JsonAst`の定義を見ると、JSONの各要素をJavaのレコード・クラス（record）やインタフェースとして表現していることがわかります。これは、JSONという「文字列」を、Javaのオブジェクトという「構造化されたデータ」に変換するための定義です。
 
 ```java
 public interface JsonAst {
@@ -467,7 +474,7 @@ public record ParseResult<T>(T value, String input) {}
 
 ### 構文解析の戦略
 
-実装に入る前に、これから作るJSONパーサーの解析戦略について説明しておきます。
+実装に入る前に、これから作るJSONパーサーの解析戦略について説明しておきます。この章の実装は、PEG（Parsing Expression Grammar）に基づくトップダウン解析を採用します。
 
 1. トップダウン解析: BNFの規則を上から順番に適用していく方式を採用します。例えば、`value`規則から始めて、それぞれの選択肢を試していきます。
 
@@ -477,7 +484,7 @@ public record ParseResult<T>(T value, String input) {}
 
 4. 例外による失敗の表現: 構文解析の失敗は、`ParseException`という例外で表現します。これにより、深くネストした解析処理から簡潔に失敗を伝播させることができます。
 
-なお、クラス名を`PegJsonParser`としているのは、この実装が後の章で説明するPEG（Parsing Expression Grammar）の考え方に基づいているためです。PEGは順序付き選択とバックトラックを特徴とする文法形式で、本実装もこれらの特徴を持っています。
+本章の実装はPEGの順序付き選択とバックトラックという特徴を持っています。そのため、クラス名は`PegJsonParser`としています（PEGの詳細は第5章で解説します）。
 
 ### 構文解析器の全体像
 
@@ -571,67 +578,67 @@ public class PegJsonParser implements JsonParser {
         // 後で解説
     }
 
-    // false = "false" ws;
+    /** BNF: false = "false" ws */
     private JsonAst.JsonFalse parseFalse() {
         // 後で解説
     }
 
-    // null = "null" ws;
+    /** BNF: null = "null" ws */
     private JsonAst.JsonNull parseNull() {
         // 後で解説
     }
 
-    // LBRACE = '{' ws;
+    /** BNF: LBRACE = '{' ws */
     private void parseLBrace() {
         // 後で解説
     }
 
-    // RBRACE = '}' ws;
+    /** BNF: RBRACE = '}' ws */
     private void parseRBrace() {
         // 後で解説
     }
 
-    // LBRACKET = '[' ws;
+    /** BNF: LBRACKET = '[' ws */
     private void parseLBracket() {
         // 後で解説
     }
 
-    // RBRACKET = ']' ws;
+    /** BNF: RBRACKET = ']' ws */
     private void parseRBracket() {
         // 後で解説
     }
 
-    // COMMA = ',' ws;
+    /** BNF: COMMA = ',' ws */
     private void parseComma() {
         // 後で解説
     }
 
-    // COLON = ':' ws;
+    /** BNF: COLON = ':' ws */
     private void parseColon() {
         // 後で解説
     }
 
-    // string = ('""' | '"' {CHAR} '"') ws;
+    /** BNF: string = ('""' | '"' {CHAR} '"') ws */
     private JsonAst.JsonString parseString() {
         // 後で解説
     }
 
-    // number = INT ws;
+    /** BNF: number = INT ws */
     private JsonAst.JsonNumber parseNumber() {
         // 後で解説
     }
 
-    // pair = string COLON value;
+    /** BNF: pair = string COLON value */
     private Pair<JsonAst.JsonString, JsonAst.JsonValue> parsePair() {
         // 後で解説
     }
 
-    // object = LBRACE RBRACE | LBRACE pair {COMMA pair} RBRACE;
+    /** BNF: object = LBRACE RBRACE | LBRACE pair {COMMA pair} RBRACE */
     private JsonAst.JsonObject parseObject() {
         // 後で解説
     }
 
-    // array = LBRACKET RBRACKET | LBRACKET value {COMMA value} RBRACKET;
+    /** BNF: array = LBRACKET RBRACKET | LBRACKET value {COMMA value} RBRACKET */
     public JsonAst.JsonArray parseArray() {
         // 後で解説
     }
@@ -648,7 +655,7 @@ public class PegJsonParser implements JsonParser {
 }
 ```
 
-構文解析器を実装する方法としては、同じ入力文字列を与えれば同じ解析結果が返ってくるような関数型の実装方法と、今回のように、現在どこまで読み進めたかによって解析結果が変わる手続き型の方法があるのですが、手続き型の方が説明しやすいので、本書では手続き型の実装方法を採用しています。
+構文解析器の実装スタイルには、大きく分けて「関数型（不変データ・純粋関数を重視）」と「手続き型（内部状態と更新を用いる）」があります。どちらも正しく実装すれば、同じ入力に対して同じ解析結果を返しますが、表現と状態管理の方法が異なります。本書では説明のしやすさから手続き型の実装を採用します。
 
 また、`skipWhitespace()`メソッドと`recognize()`メソッドを定義して、空白文字の読み飛ばしと、特定の文字列の認識を行います。さらに、構文解析中にエラーが発生した場合は`ParseException`を投げることで、どこでどのような問題が発生したかを呼び出し元に伝えます。
 
@@ -982,6 +989,7 @@ array = LBRACKET RBRACKET | LBRACKET {value {COMMA value}} RBRACKET ;
 オブジェクトの構文解析は、次のような `parseObject()` メソッドとして定義します。
 
 ```java
+    /** BNF: object = LBRACE RBRACE | LBRACE pair {COMMA pair} RBRACE */
     private JsonAst.JsonObject parseObject() {
         int backup = cursor;
         try {
@@ -1076,7 +1084,7 @@ PEGは直感的でシンプルなので、最初に学ぶのに適していま�
 
 ## 古典的な構文解析器
 
-前節では、PEGという手法を使って構文解析器を作りました。しかし、伝統的な構文解析の手法では、少し違ったアプローチをとります。
+前節では、PEGという手法を使って構文解析器を作りました。しかし、LL/LR系（例：LL(1)、LR(1)）に代表される伝統的な構文解析の手法では、少し違ったアプローチをとります。
 
 伝統的な手法では、構文解析を以下の2つのステップに分けます：
 
@@ -1101,7 +1109,7 @@ We are parsers.
 
 前節で出てきたJSONの構文解析器では`skipWhitespace()`の呼び出しが頻出していましたが、字句解析器を使う場合、空白を読み飛ばす処理を先に行うことで、構文解析器では空白の読み飛ばしという作業をしなくてよくなります。
 
-この点はトレードオフがあって、たとえば、空白に関する規則がある言語の中でブレがある場合には、字句解析という前処理はかえってしない方が良いということすらあります。ともあれ、字句解析という前処理を通すことには一定のメリットがあるのは確かです。
+この点はトレードオフがあって、たとえば、空白に関する規則がある言語（Pythonのオフサイドルール＝インデントでブロックを表す規則など）では、字句解析という前処理を安易に入れると逆に扱いづらくなることすらあります。ともあれ、字句解析という前処理を通すことには一定のメリットがあるのは確かです。
 
 以下では字句解析器を使った構文解析器の全体像を示します。ここでは、コアとなるアイデアに絞って説明します。完全なソースコードは巻末の付録を参照してください。
 
@@ -1251,7 +1259,7 @@ PEG版と異なり、途中で失敗したら後戻り（バックトラック�
 
 以下では構文解析のための各メソッドの詳細を説明します。残りのコードは、巻末の付録に掲載しています。
 
-### parseValue
+### valueの構文解析メソッド（トークンベース）
 
 `parseValue()`メソッドは、JSONの値を解析するためのメソッドです。これは、BNFで定義された`value = true | false | null | number | string | object | array`に対応しています。実装は以下のようになります。
 
@@ -1335,6 +1343,7 @@ PEG版と異なり、途中で失敗したら後戻り（バックトラック�
 `parseArray()`メソッドは、規則`array`に対応するメソッドで、JSONの配列リテラルに対応するものを解析するメソッドでもあります。実装を示すと以下のようになります：
 
 ```java
+    /** BNF: array = LBRACKET RBRACKET | LBRACKET value {COMMA value} RBRACKET */
     private JsonAst.JsonArray parseArray() {
         if(current().type != Token.Type.LBRACKET) {
             throw new ParseException(
