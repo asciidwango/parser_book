@@ -270,7 +270,7 @@ public class PEG2Java {
 
 ```java
 // D <- P;
-// P <- "(" P ")" P / "()";
+// P <- "(" P ")" P / "";
 List<Rule> rules = Arrays.asList(
     new Rule("D", new NT("P")),
     new Rule("P", 
@@ -281,7 +281,8 @@ List<Rule> rules = Arrays.asList(
                 new Lit(")"),
                 new NT("P")
             ),
-            new Lit("()")
+            // 空文字列 ε（イプシロン）
+            new Lit("")
          )
     )
 );
@@ -329,13 +330,15 @@ public class Parser {
             parseP();
         } catch (Failure e) {
             pos = saved;
-            match("()");
+            match(""); // ε（何も消費しないが成功）
         }
 
         return;
     }
 }
 ```
+
+空文字列への分岐（`match("")`）を残しているので、`()`のように`P`が空になるケースも、`(())`のようにネストするケースも成功します。`try`ブロックで失敗したときに位置を巻き戻してから空文字列を選択する、という6.1.2節と同じ挙動を保っています。
 
 このコードは実際にDyck言語の変形版を解析することができます。`parseD()`メソッドを呼び出すことで、Dyck言語の文字列が正しいかどうかをチェックできます。
 
@@ -897,7 +900,7 @@ object Calculator extends SCombinator {
 }
 ```
 
-ScalaはJavaとは異なるプログラミング言語ですが、JVM上で動く言語なので、Javaユーザーの方でも比較的理解しやすいと思います。
+ScalaはJavaとは異なるプログラミング言語ですが、構文にJavaと似た部分が多く（しかもJVM上でも動かせる処理系がある）、Javaユーザーの方でも比較的読み進めやすいはずです（同じJVMでもEtaのようにHaskellに近い文法の言語もあるので、「JVMだから読みやすい」というよりは「文法が近い」点がポイントです）。
 
 各メソッドに対応するBNFによる規則をコメントとして付加してみましたが、BNFと比較しても簡潔に記述できているのがわかります。Scalaは記号をそのままメソッドとして記述できるなど、元々DSL（ドメイン特化言語）に向いている特徴を持った言語なのですが、その特徴を活用しています。`chainl`というメソッドについてだけは見慣れない読者の方は多そうですが、これは
 
@@ -1043,6 +1046,8 @@ assert new Result<String>("foo", "").equals(new JLiteralParser("foo").parse("foo
 リテラルを表すフィールド`literal`が`input`の先頭とマッチした場合、`literal`と残りの文字列からなる`Result<String>`を返します。そうでない場合は返すべき`Result`がないので`null`を返します。簡単ですね。
 
 `startsWith`メソッドは、文字列がある文字列で始まるかを判定するJavaの標準メソッドです。`substring`メソッドは、文字列の一部を切り出すメソッドです。
+
+ここでは簡潔さを優先して失敗時に`null`を返していますが、SCombで使ったような`Success`/`Failure`の直和型にしておくと、戻り値に`null`が紛れ込む心配がなくなります。JCombでは説明を短くするため`null`にしていますが、実用では明示的な結果型にするのがおすすめです。
 
 あとはこのクラスのインスタンスを返す`string()`メソッドを作成するだけです。なお、使うときの利便性のため、以降では各種メソッドはクラス`JComb`のstaticメソッドとして実装していきます。
 
@@ -1287,12 +1292,12 @@ assert (new Result<Integer>(10, "")).equals(number.parse("10"));
 ```java
 public class Calculator {
     // expression は加減算を担当 (左結合)
-    // PEG: expression <- multitive ( ( "+" / "-" ) multitive )*
+    // PEG: expression <- multitive ( ( "+" | "-" ) multitive )*
     public static JParser<Integer> expression() {
-        return seq( // multitive と (( "+" / "-" ) multitive )* の連接
+        return seq( // multitive と (( "+" | "-" ) multitive )* の連接
             lazy(() -> multitive()), // 左辺の multitive (乗除の項)
             rep0( // 0回以上の繰り返し
-                seq( // ( "+" / "-" ) と multitive の連接
+                seq( // ( "+" | "-" ) と multitive の連接
                     // "+" または "-"
                     alt(string("+"), string("-")), 
                     lazy(() -> multitive()) // 右辺の multitive
@@ -1315,12 +1320,12 @@ public class Calculator {
     }
 
     // multitive は乗除算を担当 (左結合)
-    // PEG: multitive <- primary ( ( "*" / "/" ) primary )*
+    // PEG: multitive <- primary ( ( "*" | "/" ) primary )*
     public static JParser<Integer> multitive() {
-        return seq( // primary と ( ( "*" / "/" ) primary )* の連接
+        return seq( // primary と ( ( "*" | "/" ) primary )* の連接
             lazy(() -> primary()), // 左辺の primary
             rep0( // 0回以上の繰り返し
-                seq( // ( "*" / "/" ) と primary の連接
+                seq( // ( "*" | "/" ) と primary の連接
                     alt(string("*"), string("/")), // "*" または "/"
                     lazy(() -> primary()) // 右辺の primary
                 )
@@ -1343,7 +1348,7 @@ public class Calculator {
         });
     }
 
-    // primary <- number / "(" expression ")"
+    // primary <- number | "(" expression ")"  （PEGでは | の代わりに / を使う）
     public static JParser<Integer> primary() {
         return alt( // number または "(" expression ")" の選択
             number, // 数値パーサ
